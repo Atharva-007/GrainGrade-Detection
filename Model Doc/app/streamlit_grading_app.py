@@ -15,8 +15,10 @@ import io
 import json
 import mimetypes
 import os
+import re
 from pathlib import Path
 
+import numpy as np
 import streamlit as st
 from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
@@ -61,6 +63,75 @@ REFERENCE_IMAGES = [
     ("C", "Canonical C: scattered dark pockets + shrivel tails.",
      RAGI_IMAGE_DIR / "GRADE C" / "IMG_4421.JPG"),
 ]
+
+
+def read_markdown_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="cp1252", errors="replace")
+
+
+def get_api_key() -> str:
+    return os.environ.get("GEMINI_API_KEY", "") or os.environ.get("VERTEX_API_KEY", "")
+
+
+def use_vertex_ai() -> bool:
+    value = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def configured_for_genai(api_key: str, vertex_mode: bool) -> bool:
+    return vertex_mode or bool(api_key)
+
+
+def create_genai_client(api_key: str, vertex_mode: bool = False) -> genai.Client:
+    if vertex_mode:
+        return genai.Client(
+            vertexai=True,
+            project=os.environ.get("GOOGLE_CLOUD_PROJECT") or None,
+            location=os.environ.get("GOOGLE_CLOUD_LOCATION") or None,
+        )
+    if not api_key:
+        raise ValueError("Set GEMINI_API_KEY or VERTEX_API_KEY in .env.")
+    return genai.Client(api_key=api_key)
+
+
+def available_reference_images() -> list[tuple[str, str, Path]]:
+    return [item for item in REFERENCE_IMAGES if item[2].exists()]
+
+
+def format_external_error(exc: Exception) -> str:
+    text = str(exc)
+    activation = re.search(
+        r"https://console\.developers\.google\.com/apis/api/"
+        r"generativelanguage\.googleapis\.com/overview\?project=\d+",
+        text,
+    )
+    if "SERVICE_DISABLED" in text or "Gemini API has not been used" in text:
+        return "Gemini API is disabled for the Google project attached to this API key."
+    if "PERMISSION_DENIED" in text:
+        return "Google returned PERMISSION_DENIED for the configured API key/project."
+    if "API key not valid" in text or "API_KEY_INVALID" in text:
+        return "The configured Gemini API key is invalid. Check `.env`."
+    if "RESOURCE_EXHAUSTED" in text or "quota" in text.lower():
+        return "The configured Gemini API quota is exhausted or rate-limited."
+    return text if len(text) <= 600 else text[:600] + "..."
+
+
+def should_use_local_fallback(exc: Exception) -> bool:
+    text = str(exc)
+    return any(
+        marker in text
+        for marker in (
+            "SERVICE_DISABLED",
+            "PERMISSION_DENIED",
+            "API_KEY_INVALID",
+            "API key not valid",
+            "RESOURCE_EXHAUSTED",
+            "generativelanguage.googleapis.com",
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +235,7 @@ RAG_QUERY = (
 def load_prompt_doc(key: str) -> str:
     p = PROMPT_DOCS.get(key)
     if p and p.exists():
-        return p.read_text()
+        return read_markdown_text(p)
     return ""
 
 
@@ -173,7 +244,7 @@ def load_all_prompt_docs() -> str:
     parts = []
     for key, path in PROMPT_DOCS.items():
         if path.exists():
-            parts.append(f"# === {path.name} ===\n{path.read_text()}")
+            parts.append(f"# === {path.name} ===\n{read_markdown_text(path)}")
     return "\n\n---\n\n".join(parts)
 
 
@@ -183,10 +254,11 @@ def retrieve_rag_context(query: str, k: int) -> tuple[str, list[dict]]:
     if not rag.index_exists():
         return "", []
     # Local import avoids creating a client outside cache scope
-    api_key = os.environ.get("VERTEX_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    if not api_key:
+    api_key = get_api_key()
+    vertex_mode = use_vertex_ai()
+    if not configured_for_genai(api_key, vertex_mode):
         return "", []
-    client = genai.Client(vertexai=True, api_key=api_key)
+    client = create_genai_client(api_key, vertex_mode)
     hits = rag.retrieve(client, query, k=k)
     formatted = rag.format_retrieved(hits)
     meta = [{"source": h[0].source, "title": h[0].title, "score": h[1],
@@ -229,12 +301,17 @@ def draw_region_boxes(image_bytes: bytes, regions: list[dict]) -> Image.Image:
         bbox = r.get("bbox")
         if not (isinstance(bbox, list) and len(bbox) == 4):
             continue
-        ymin, xmin, ymax, xmax = bbox
-        x1 = int(xmin / 1000 * w)
-        y1 = int(ymin / 1000 * h)
-        x2 = int(xmax / 1000 * w)
-        y2 = int(ymax / 1000 * h)
-        grade = r.get("grade", "?")
+        try:
+            ymin, xmin, ymax, xmax = [float(v) for v in bbox]
+        except (TypeError, ValueError):
+            continue
+        x1 = max(0, min(w, int(xmin / 1000 * w)))
+        y1 = max(0, min(h, int(ymin / 1000 * h)))
+        x2 = max(0, min(w, int(xmax / 1000 * w)))
+        y2 = max(0, min(h, int(ymax / 1000 * h)))
+        if x2 <= x1 or y2 <= y1:
+            continue
+        grade = str(r.get("grade", "?")).upper()
         color = GRADE_COLORS.get(grade, (200, 200, 200))
         draw.rectangle([x1, y1, x2, y2], outline=color, width=line_width)
 
@@ -264,12 +341,132 @@ def ensure_at_least_one_region(result: dict) -> dict:
     return result
 
 
+def local_grade_image(image_bytes: bytes) -> dict:
+    """Best-effort local fallback used only when Gemini is unavailable."""
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    img.thumbnail((640, 640))
+    arr = np.asarray(img, dtype=np.float32) / 255.0
+
+    max_c = arr.max(axis=2)
+    min_c = arr.min(axis=2)
+    saturation = (max_c - min_c) / (max_c + 1e-6)
+    brightness = arr.mean(axis=2)
+
+    grain_mask = (saturation > 0.08) & (max_c > 0.05) & (max_c < 0.97)
+    if float(grain_mask.mean()) < 0.03:
+        grain_mask = (brightness < 0.92) & (max_c > 0.04)
+
+    if not np.any(grain_mask):
+        grain_mask = np.ones(brightness.shape, dtype=bool)
+
+    pixels = arr[grain_mask]
+    pixel_brightness = pixels.mean(axis=1)
+    mean_rgb = pixels.mean(axis=0)
+    color_spread = float(np.mean(np.std(pixels, axis=0)))
+    brightness_spread = float(np.std(pixel_brightness))
+    median_brightness = float(np.median(pixel_brightness))
+
+    dark_cutoff = max(0.12, median_brightness - 1.6 * brightness_spread)
+    light_cutoff = min(0.90, median_brightness + 1.8 * brightness_spread)
+    dark_fraction = float(np.mean(pixel_brightness < dark_cutoff))
+    light_fraction = float(np.mean(pixel_brightness > light_cutoff))
+    low_saturation_fraction = float(np.mean(saturation[grain_mask] < 0.12))
+
+    defect_fraction = min(1.0, dark_fraction + light_fraction + max(0.0, color_spread - 0.10) * 1.5)
+    off_tone_percentage = min(100.0, 100.0 * (dark_fraction + light_fraction + 0.35 * low_saturation_fraction))
+    uniformity_score = max(0.0, 1.0 - min(1.0, (color_spread + brightness_spread) * 2.0))
+
+    if off_tone_percentage < 5 and defect_fraction < 0.05 and uniformity_score >= 0.72:
+        grade = "A"
+        quality_score = int(round(92 + uniformity_score * 8))
+        recommended_use = "Premium direct consumption after standard cleaning."
+    elif off_tone_percentage < 18 and defect_fraction < 0.16 and uniformity_score >= 0.45:
+        grade = "B"
+        quality_score = int(round(76 + uniformity_score * 12))
+        recommended_use = "Commercial retail or processing after cleaning."
+    else:
+        grade = "C"
+        quality_score = int(round(max(45, 74 - off_tone_percentage * 0.7 - defect_fraction * 25)))
+        recommended_use = "Processing-grade; inspect manually before food use."
+
+    ys, xs = np.where(grain_mask)
+    if len(xs) and len(ys):
+        h, w = grain_mask.shape
+        pad_x = max(2, int(0.02 * w))
+        pad_y = max(2, int(0.02 * h))
+        xmin = max(0, int(xs.min()) - pad_x)
+        xmax = min(w - 1, int(xs.max()) + pad_x)
+        ymin = max(0, int(ys.min()) - pad_y)
+        ymax = min(h - 1, int(ys.max()) + pad_y)
+        bbox = [
+            int(ymin / h * 1000),
+            int(xmin / w * 1000),
+            int(ymax / h * 1000),
+            int(xmax / w * 1000),
+        ]
+    else:
+        bbox = [50, 50, 950, 950]
+
+    dominant_tone = "reddish-brown" if mean_rgb[0] >= mean_rgb[1] >= mean_rgb[2] else "brown / mixed"
+    color_uniformity = "high" if uniformity_score >= 0.72 else "moderate" if uniformity_score >= 0.45 else "low"
+    mixed = off_tone_percentage >= 15 or uniformity_score < 0.45
+    confidence = 0.55 if grade in {"A", "B"} else 0.48
+
+    return {
+        "grade": grade,
+        "quality_score": quality_score,
+        "is_mixed_batch": mixed,
+        "regions": [{
+            "bbox": bbox,
+            "grade": grade,
+            "reason": "local color/texture fallback estimate",
+            "confidence": confidence,
+        }],
+        "color_analysis": {
+            "dominant_tone": dominant_tone,
+            "secondary_tone": "dark or pale outliers" if off_tone_percentage >= 5 else "minimal",
+            "off_tone_percentage": round(off_tone_percentage, 1),
+            "uniformity": color_uniformity,
+        },
+        "size_analysis": {
+            "uniformity": color_uniformity,
+            "shriveled_fraction": round(min(1.0, brightness_spread * 1.8), 3),
+        },
+        "shape_analysis": {
+            "defect_fraction": round(defect_fraction, 3),
+            "defect_types": ["color/brightness outliers"] if defect_fraction >= 0.05 else [],
+        },
+        "foreign_matter": {
+            "percentage": round(light_fraction * 100, 1),
+            "types_detected": ["light-colored particles"] if light_fraction > 0.02 else [],
+            "large_contaminants": False,
+        },
+        "biological_risk": {
+            "fungus_detected": False,
+            "insect_damage": False,
+            "webbing": False,
+            "clumping": False,
+        },
+        "storage_risk": "moderate" if grade == "C" else "low",
+        "reject_recommended": False,
+        "reject_reasons": [],
+        "confidence": confidence,
+        "remarks": "Local fallback result because Gemini API was unavailable. Use manual inspection for final decisions.",
+        "recommended_use": recommended_use,
+        "reasoning": {
+            "grade_a_case": "Chosen only when color and brightness distribution are highly uniform.",
+            "grade_b_case": "Chosen for moderate variation without strong outlier evidence.",
+            "grade_c_case": "Chosen when color/brightness outliers or low uniformity are high.",
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Gemini client
 # ---------------------------------------------------------------------------
 @st.cache_resource(show_spinner=False)
-def get_client(api_key: str) -> genai.Client:
-    return genai.Client(vertexai=True, api_key=api_key)
+def get_client(api_key: str, vertex_mode: bool) -> genai.Client:
+    return create_genai_client(api_key, vertex_mode)
 
 
 def build_contents(
@@ -288,10 +485,9 @@ def build_contents(
         parts.append(types.Part.from_text(text="\n\n" + rag_context))
     # 3) Labeled reference images
     if use_references:
+        refs = available_reference_images()
         parts.append(types.Part.from_text(text="\n\n--- LABELED REFERENCES ---"))
-        for grade, note, path in REFERENCE_IMAGES:
-            if not path.exists():
-                continue
+        for grade, note, path in refs:
             parts.append(types.Part.from_text(text=f"\nREFERENCE — GRADE: {grade} — {note}"))
             parts.append(image_part_from_path(path))
     # 4) Target
@@ -310,7 +506,13 @@ def grade_image(client: genai.Client, model_name: str, parts: list) -> dict:
             response_mime_type="application/json",
         ),
     )
-    return json.loads(response.text)
+    try:
+        result = json.loads(response.text or "")
+    except json.JSONDecodeError as exc:
+        raise ValueError("Model returned invalid JSON.") from exc
+    if not isinstance(result, dict):
+        raise ValueError("Model returned JSON, but not an object.")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -320,28 +522,41 @@ st.set_page_config(page_title="Ragi Grading — RAG + Vision", page_icon="🌾",
 st.title("🌾 Finger Millet (Ragi) Grading System")
 st.caption("Gemini Vision · RAG over grading docs + Handbook · 3-tier scale · bounding-box regions")
 
-api_key = os.environ.get("VERTEX_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
+api_key = get_api_key()
+vertex_mode = use_vertex_ai()
+genai_configured = configured_for_genai(api_key, vertex_mode)
 
 with st.sidebar:
     st.header("Configuration")
-    if api_key:
-        st.success(f"API key loaded (…{api_key[-6:]})")
+    if vertex_mode:
+        st.success("Vertex AI mode enabled")
+    elif api_key:
+        st.success(f"API key loaded (...{api_key[-6:]})")
     else:
-        st.error("VERTEX_API_KEY missing in .env")
+        st.error("GEMINI_API_KEY or VERTEX_API_KEY missing in .env")
 
     if rag.index_exists():
-        n_chunks = sum(1 for _ in open(APP_DIR / "rag_chunks.jsonl"))
+        with (APP_DIR / "rag_chunks.jsonl").open(encoding="utf-8") as f:
+            n_chunks = sum(1 for _ in f)
         st.success(f"RAG index: {n_chunks} chunks")
     else:
         st.warning("RAG index missing. Run `python build_rag_index.py` first.")
+
+    reference_count = len(available_reference_images())
+    if reference_count < len(REFERENCE_IMAGES):
+        st.warning(f"Reference images: {reference_count}/{len(REFERENCE_IMAGES)} available")
 
     model_name = st.selectbox(
         "Model",
         options=["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-001"],
         index=0,
     )
-    use_references = st.toggle("Few-shot reference images", value=True,
-                               help="7 labeled images (2×A, 2×B, 3×C). ~5-8k image tokens.")
+    use_references = st.toggle(
+        "Few-shot reference images",
+        value=reference_count > 0,
+        disabled=reference_count == 0,
+        help=f"{reference_count} labeled reference image(s) available.",
+    )
     use_rag = st.toggle("Use RAG retrieval", value=True,
                         help="Retrieve top-k relevant passages from the knowledge base.")
     rag_k = st.slider("RAG top-k", 3, 15, 8, disabled=not use_rag)
@@ -360,10 +575,10 @@ with tab_grade:
         uploaded = st.file_uploader("Macro photo of ragi grains",
                                      type=["jpg", "jpeg", "png"])
         if uploaded is not None:
-            st.image(uploaded, caption=uploaded.name, use_container_width=True)
+            st.image(uploaded, caption=uploaded.name, width="stretch")
         run = st.button("🔍 Grade this batch", type="primary",
-                        disabled=uploaded is None or not api_key,
-                        use_container_width=True)
+                        disabled=uploaded is None or not genai_configured,
+                        width="stretch")
 
     with col_out:
         st.subheader("2 · Grading result")
@@ -372,20 +587,35 @@ with tab_grade:
             target_mime = uploaded.type or "image/jpeg"
 
             rag_context, rag_meta = ("", [])
+            cloud_unavailable_message = ""
             if use_rag:
                 with st.spinner("Retrieving from knowledge base…"):
-                    rag_context, rag_meta = retrieve_rag_context(RAG_QUERY, rag_k)
+                    try:
+                        rag_context, rag_meta = retrieve_rag_context(RAG_QUERY, rag_k)
+                    except Exception as e:
+                        if should_use_local_fallback(e):
+                            cloud_unavailable_message = format_external_error(e)
+                        else:
+                            st.warning(f"RAG retrieval failed; continuing without RAG: {format_external_error(e)}")
 
-            try:
-                with st.spinner(f"Calling {model_name}…"):
-                    client = get_client(api_key)
-                    parts = build_contents(target_bytes, target_mime,
-                                           use_references, rag_context)
-                    result = grade_image(client, model_name, parts)
-                    result = ensure_at_least_one_region(result)
-            except Exception as e:
-                st.error(f"Grading failed: {e}")
-                st.stop()
+            if cloud_unavailable_message:
+                st.info(f"{cloud_unavailable_message} Using local fallback grading.")
+                result = ensure_at_least_one_region(local_grade_image(target_bytes))
+            else:
+                try:
+                    with st.spinner(f"Calling {model_name}…"):
+                        client = get_client(api_key, vertex_mode)
+                        parts = build_contents(target_bytes, target_mime,
+                                               use_references, rag_context)
+                        result = grade_image(client, model_name, parts)
+                        result = ensure_at_least_one_region(result)
+                except Exception as e:
+                    if should_use_local_fallback(e):
+                        st.info(f"{format_external_error(e)} Using local fallback grading.")
+                        result = ensure_at_least_one_region(local_grade_image(target_bytes))
+                    else:
+                        st.error(f"Grading failed: {format_external_error(e)}")
+                        st.stop()
 
             grade = result.get("grade", "?")
             score = result.get("quality_score", "?")
@@ -405,7 +635,7 @@ with tab_grade:
             st.image(
                 annotated,
                 caption=f"{len(regions)} region(s) detected — 🟢 A · 🟡 B · 🟠 C",
-                use_container_width=True,
+                width="stretch",
             )
 
             if result.get("remarks"):
@@ -464,8 +694,8 @@ with tab_grade:
 
             with st.expander("Raw JSON response"):
                 st.json(result)
-        elif not api_key:
-            st.info("Set VERTEX_API_KEY in `.env` and restart.")
+        elif not genai_configured:
+            st.info("Set GEMINI_API_KEY or VERTEX_API_KEY in `.env` and restart.")
         else:
             st.info("Upload an image and click **Grade this batch**.")
 
@@ -502,7 +732,7 @@ with tab_docs:
     st.divider()
     st.subheader("RAG index status")
     if rag.index_exists():
-        with open(APP_DIR / "rag_chunks.jsonl") as f:
+        with (APP_DIR / "rag_chunks.jsonl").open(encoding="utf-8") as f:
             all_chunks = [json.loads(line) for line in f if line.strip()]
         st.write(f"**{len(all_chunks)}** indexed chunks across "
                  f"**{len(set(c['source'] for c in all_chunks))}** sources.")
@@ -511,12 +741,15 @@ with tab_docs:
                               value="biological hazards fungus mold detection")
         k = st.slider("Top-k", 3, 15, 5, key="rag_browse_k")
         if st.button("Search", key="rag_search_btn"):
-            _, meta = retrieve_rag_context(query, k)
-            for m in meta:
-                st.markdown(
-                    f"**[{m['source']}] {m['title']}** — score {m['score']:.3f}\n\n"
-                    f"> {m['preview']}…"
-                )
-                st.divider()
+            try:
+                _, meta = retrieve_rag_context(query, k)
+                for m in meta:
+                    st.markdown(
+                        f"**[{m['source']}] {m['title']}** — score {m['score']:.3f}\n\n"
+                        f"> {m['preview']}…"
+                    )
+                    st.divider()
+            except Exception as e:
+                st.error(f"RAG search failed: {format_external_error(e)}")
     else:
         st.warning("Run `python build_rag_index.py` in the app directory to build the index.")

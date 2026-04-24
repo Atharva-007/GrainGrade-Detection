@@ -43,7 +43,7 @@ def _load_chunks() -> list[Chunk]:
     if not CHUNKS_PATH.exists():
         return []
     chunks: list[Chunk] = []
-    with CHUNKS_PATH.open() as f:
+    with CHUNKS_PATH.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:

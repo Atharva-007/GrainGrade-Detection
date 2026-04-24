@@ -15,15 +15,12 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-
-import pypdf
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -44,12 +41,40 @@ MAX_CHARS_PER_CHUNK = 1500  # ~400 tokens; within embedding model limits
 OVERLAP_CHARS = 150
 
 
+def read_markdown_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="cp1252", errors="replace")
+
+
+def get_api_key() -> str:
+    return os.environ.get("GEMINI_API_KEY", "") or os.environ.get("VERTEX_API_KEY", "")
+
+
+def use_vertex_ai() -> bool:
+    value = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def create_genai_client(api_key: str, vertex_mode: bool = False) -> genai.Client:
+    if vertex_mode:
+        return genai.Client(
+            vertexai=True,
+            project=os.environ.get("GOOGLE_CLOUD_PROJECT") or None,
+            location=os.environ.get("GOOGLE_CLOUD_LOCATION") or None,
+        )
+    if not api_key:
+        raise ValueError("Set GEMINI_API_KEY or VERTEX_API_KEY in .env.")
+    return genai.Client(api_key=api_key)
+
+
 # ---------------------------------------------------------------------------
 # Chunking
 # ---------------------------------------------------------------------------
 def chunk_markdown(path: Path, source_label: str) -> list[dict]:
     """Split a markdown file by H1/H2 sections, then by size cap."""
-    text = path.read_text()
+    text = read_markdown_text(path)
     sections = re.split(r"(?m)^(#{1,2} .+)$", text)
     chunks: list[dict] = []
     current_title = path.stem
@@ -83,6 +108,8 @@ def chunk_markdown(path: Path, source_label: str) -> list[dict]:
 
 
 def chunk_pdf(path: Path, source_label: str) -> list[dict]:
+    import pypdf
+
     reader = pypdf.PdfReader(str(path))
     chunks: list[dict] = []
     for page_num, page in enumerate(reader.pages, start=1):
@@ -128,11 +155,12 @@ def embed_documents(client: genai.Client, texts: list[str]) -> np.ndarray:
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    api_key = os.environ.get("VERTEX_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise SystemExit("Set VERTEX_API_KEY in .env before building the index.")
+    api_key = get_api_key()
+    vertex_mode = use_vertex_ai()
+    if not vertex_mode and not api_key:
+        raise SystemExit("Set GEMINI_API_KEY or VERTEX_API_KEY in .env before building the index.")
 
-    client = genai.Client(vertexai=True, api_key=api_key)
+    client = create_genai_client(api_key, vertex_mode)
 
     all_chunks: list[dict] = []
 
@@ -159,15 +187,17 @@ def main():
         c["id"] = f"chunk_{i:04d}"
 
     print(f"\nTotal chunks: {len(all_chunks)}")
+    if not all_chunks:
+        raise SystemExit("No markdown or PDF chunks found; restore the source documents first.")
     print("Embedding…")
     embeddings = embed_documents(client, [c["text"] for c in all_chunks])
 
     # Persist
     chunks_path = APP_DIR / "rag_chunks.jsonl"
     index_path = APP_DIR / "rag_index.npz"
-    with chunks_path.open("w") as f:
+    with chunks_path.open("w", encoding="utf-8") as f:
         for c in all_chunks:
-            f.write(json.dumps(c) + "\n")
+            f.write(json.dumps(c, ensure_ascii=False) + "\n")
     np.savez(index_path, embeddings=embeddings)
 
     print(f"\nWrote {chunks_path.name} ({chunks_path.stat().st_size:,} bytes)")
