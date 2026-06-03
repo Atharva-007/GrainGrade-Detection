@@ -1,0 +1,38 @@
+{
+  "sample_id": "FARM-001",
+  "image_path": "feedback_data\\session_uploads\\sample_20260430T003356358141.jpeg",
+  "farm_id": "FARM-001",
+  "predicted_grade": "C",
+  "true_grade": "A",
+  "predicted_moisture_risk": "CRITICAL",
+  "true_moisture_risk": "LOW",
+  "image_features": {
+    "image_path": "feedback_data\\session_uploads\\sample_20260430T003356358141.jpeg",
+    "image_size": {
+      "width": 960,
+      "height": 1280
+    },
+    "grain_mask_coverage": 0.0015934244791666666,
+    "texture_entropy": 2.314971461032691,
+    "lab_features": {
+      "l_mean": 92.59754943847656,
+      "l_std": 44.73004150390625,
+      "a_mean": 128.6823272705078,
+      "b_mean": 138.8304443359375,
+      "color_darkness_index": 63.687235514322914
+    },
+    "clumping": {
+      "density": 0.0929519917809234,
+      "cluster_count": 59,
+      "avg_cluster_size": 23.220338983050848
+    },
+    "roughness_score": 48.1592431640625,
+    "specular_highlights_ratio": 0.0449438202247191,
+    "uniformity_score": 49.683719780157176
+  },
+  "confidence": 86,
+  "timestamp": "2026-04-30T00:33:58.993055",
+  "device_model": "iPhone 12",
+  "batch_id": "BATCH-2026-04",
+  "notes": ""
+}

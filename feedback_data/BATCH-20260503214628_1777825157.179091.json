@@ -1,0 +1,1379 @@
+{
+  "sample_id": "BATCH-20260503214628",
+  "image_path": "feedback_data\\session_uploads\\sample_20260503T214628800767.jpeg",
+  "farm_id": "AUTO",
+  "predicted_grade": "C",
+  "true_grade": "B",
+  "predicted_moisture_risk": "CRITICAL",
+  "true_moisture_risk": "CRITICAL",
+  "image_features": {
+    "image_path": "feedback_data\\session_uploads\\sample_20260503T214628800767.jpeg",
+    "image_size": {
+      "width": 1280,
+      "height": 960
+    },
+    "capture_distance_estimate_cm": null,
+    "capture_distance_source": "auto",
+    "calibration": {
+      "available": true,
+      "sheet_detected": true,
+      "reference_patch_detected": false,
+      "marker_count": 13,
+      "source": "aruco-grid",
+      "pixels_per_mm": 3.05,
+      "mm_per_pixel": 0.32787,
+      "grid_spacing_mm": 10.0,
+      "grid_spacing_px": 30.5,
+      "grid_spacing_vertical_px": 21.0,
+      "grid_spacing_horizontal_px": 40.0,
+      "grid_confidence": 1.0,
+      "sheet_style": "precision-white",
+      "calibration_reference": "detected-grid-lines"
+    },
+    "sample_field": {
+      "bbox": [
+        0,
+        0,
+        1280,
+        960
+      ],
+      "area_px": 1228800.0,
+      "source": "grain-mask-field"
+    },
+    "grain_mask_coverage": 0.6654378255208333,
+    "texture_entropy": 0.9427414136502613,
+    "lab_features": {
+      "l_mean": 114.35640716552734,
+      "l_std": 44.849769592285156,
+      "a_mean": 153.55218505859375,
+      "b_mean": 153.52992248535156,
+      "color_darkness_index": 55.15435013116575
+    },
+    "clumping": {
+      "density": 0.148765424549464,
+      "cluster_count": 1482,
+      "avg_cluster_size": 261.2928475033738
+    },
+    "roughness_score": 4.459426574707031,
+    "specular_highlights_ratio": 0.011999657571940466,
+    "uniformity_score": 66.30170239925712,
+    "calibrated_geometry": {
+      "available": true,
+      "grain_area_mm2": 87900.648,
+      "grain_density_per_cm2": 0.058,
+      "median_equiv_diameter_mm": 1.886,
+      "clump_equiv_diameter_mm": 18.92,
+      "grain_fill_ratio": 0.6654,
+      "field_area_mm2": 132094.448
+    },
+    "physical_properties": {
+      "available": true,
+      "component_count": 44,
+      "single_grain_candidate_count": 44,
+      "size_class": "mixed",
+      "median_diameter_mm": 9.367,
+      "p10_diameter_mm": 0.74,
+      "p90_diameter_mm": 18.845,
+      "size_cv_percent": 89.52,
+      "median_aspect_ratio": 1.333,
+      "median_roundness": 0.641,
+      "shape_class": "rounded",
+      "reflectiveness_index": 42.44,
+      "reflectiveness_class": "normal",
+      "highlight_fraction": 0.0824,
+      "dark_fraction": 0.0621,
+      "light_fraction": 0.5495,
+      "luma_mean": 114.36,
+      "luma_std": 44.85,
+      "per_grain_samples": [
+        {
+          "bbox": [
+            453,
+            917,
+            80,
+            43
+          ],
+          "area_px": 1688.0,
+          "diameter_mm": 15.2,
+          "aspect_ratio": 1.86,
+          "roundness": 0.401,
+          "shine_index": 42.71
+        },
+        {
+          "bbox": [
+            554,
+            905,
+            37,
+            55
+          ],
+          "area_px": 1442.5,
+          "diameter_mm": 14.051,
+          "aspect_ratio": 1.486,
+          "roundness": 0.719,
+          "shine_index": 31.52
+        },
+        {
+          "bbox": [
+            1276,
+            816,
+            4,
+            3
+          ],
+          "area_px": 5.0,
+          "diameter_mm": 0.827,
+          "aspect_ratio": 1.333,
+          "roundness": 0.806,
+          "shine_index": 44.63
+        },
+        {
+          "bbox": [
+            493,
+            807,
+            3,
+            4
+          ],
+          "area_px": 4.0,
+          "diameter_mm": 0.74,
+          "aspect_ratio": 1.333,
+          "roundness": 0.857,
+          "shine_index": 54.56
+        },
+        {
+          "bbox": [
+            841,
+            800,
+            4,
+            4
+          ],
+          "area_px": 7.0,
+          "diameter_mm": 0.979,
+          "aspect_ratio": 1.0,
+          "roundness": 0.943,
+          "shine_index": 48.27
+        },
+        {
+          "bbox": [
+            12,
+            769,
+            5,
+            10
+          ],
+          "area_px": 15.0,
+          "diameter_mm": 1.433,
+          "aspect_ratio": 2.0,
+          "roundness": 0.415,
+          "shine_index": 60.41
+        },
+        {
+          "bbox": [
+            938,
+            761,
+            6,
+            3
+          ],
+          "area_px": 8.0,
+          "diameter_mm": 1.046,
+          "aspect_ratio": 2.0,
+          "roundness": 0.74,
+          "shine_index": 48.45
+        },
+        {
+          "bbox": [
+            0,
+            735,
+            6,
+            23
+          ],
+          "area_px": 71.0,
+          "diameter_mm": 3.117,
+          "aspect_ratio": 3.833,
+          "roundness": 0.385,
+          "shine_index": 19.64
+        },
+        {
+          "bbox": [
+            1274,
+            512,
+            6,
+            21
+          ],
+          "area_px": 51.0,
+          "diameter_mm": 2.642,
+          "aspect_ratio": 3.5,
+          "roundness": 0.329,
+          "shine_index": 37.58
+        },
+        {
+          "bbox": [
+            80,
+            493,
+            7,
+            7
+          ],
+          "area_px": 11.5,
+          "diameter_mm": 1.255,
+          "aspect_ratio": 1.0,
+          "roundness": 0.469,
+          "shine_index": 47.18
+        },
+        {
+          "bbox": [
+            941,
+            485,
+            3,
+            4
+          ],
+          "area_px": 4.0,
+          "diameter_mm": 0.74,
+          "aspect_ratio": 1.333,
+          "roundness": 0.857,
+          "shine_index": 47.81
+        },
+        {
+          "bbox": [
+            0,
+            448,
+            21,
+            45
+          ],
+          "area_px": 528.5,
+          "diameter_mm": 8.505,
+          "aspect_ratio": 2.143,
+          "roundness": 0.411,
+          "shine_index": 30.85
+        },
+        {
+          "bbox": [
+            484,
+            427,
+            8,
+            7
+          ],
+          "area_px": 16.0,
+          "diameter_mm": 1.48,
+          "aspect_ratio": 1.143,
+          "roundness": 0.332,
+          "shine_index": 51.11
+        },
+        {
+          "bbox": [
+            329,
+            336,
+            35,
+            39
+          ],
+          "area_px": 846.0,
+          "diameter_mm": 10.761,
+          "aspect_ratio": 1.114,
+          "roundness": 0.73,
+          "shine_index": 35.18
+        },
+        {
+          "bbox": [
+            1267,
+            327,
+            13,
+            69
+          ],
+          "area_px": 636.5,
+          "diameter_mm": 9.334,
+          "aspect_ratio": 5.308,
+          "roundness": 0.355,
+          "shine_index": 44.14
+        },
+        {
+          "bbox": [
+            332,
+            309,
+            4,
+            3
+          ],
+          "area_px": 4.0,
+          "diameter_mm": 0.74,
+          "aspect_ratio": 1.333,
+          "roundness": 0.857,
+          "shine_index": 26.94
+        },
+        {
+          "bbox": [
+            560,
+            301,
+            4,
+            3
+          ],
+          "area_px": 4.0,
+          "diameter_mm": 0.74,
+          "aspect_ratio": 1.333,
+          "roundness": 0.857,
+          "shine_index": 50.06
+        },
+        {
+          "bbox": [
+            1162,
+            243,
+            28,
+            31
+          ],
+          "area_px": 645.5,
+          "diameter_mm": 9.4,
+          "aspect_ratio": 1.107,
+          "roundness": 0.787,
+          "shine_index": 42.09
+        },
+        {
+          "bbox": [
+            912,
+            240,
+            4,
+            3
+          ],
+          "area_px": 4.0,
+          "diameter_mm": 0.74,
+          "aspect_ratio": 1.333,
+          "roundness": 0.857,
+          "shine_index": 53.22
+        },
+        {
+          "bbox": [
+            984,
+            229,
+            33,
+            37
+          ],
+          "area_px": 824.5,
+          "diameter_mm": 10.623,
+          "aspect_ratio": 1.121,
+          "roundness": 0.831,
+          "shine_index": 33.8
+        },
+        {
+          "bbox": [
+            985,
+            162,
+            52,
+            46
+          ],
+          "area_px": 1462.0,
+          "diameter_mm": 14.146,
+          "aspect_ratio": 1.13,
+          "roundness": 0.707,
+          "shine_index": 39.42
+        },
+        {
+          "bbox": [
+            721,
+            139,
+            32,
+            37
+          ],
+          "area_px": 859.5,
+          "diameter_mm": 10.846,
+          "aspect_ratio": 1.156,
+          "roundness": 0.819,
+          "shine_index": 43.36
+        },
+        {
+          "bbox": [
+            518,
+            132,
+            4,
+            3
+          ],
+          "area_px": 4.0,
+          "diameter_mm": 0.74,
+          "aspect_ratio": 1.333,
+          "roundness": 0.857,
+          "shine_index": 22.14
+        },
+        {
+          "bbox": [
+            295,
+            113,
+            142,
+            75
+          ],
+          "area_px": 5081.0,
+          "diameter_mm": 26.371,
+          "aspect_ratio": 1.893,
+          "roundness": 0.246,
+          "shine_index": 42.18
+        },
+        {
+          "bbox": [
+            604,
+            105,
+            44,
+            59
+          ],
+          "area_px": 1850.0,
+          "diameter_mm": 15.913,
+          "aspect_ratio": 1.341,
+          "roundness": 0.75,
+          "shine_index": 41.14
+        },
+        {
+          "bbox": [
+            821,
+            104,
+            44,
+            58
+          ],
+          "area_px": 1492.0,
+          "diameter_mm": 14.29,
+          "aspect_ratio": 1.318,
+          "roundness": 0.583,
+          "shine_index": 36.02
+        },
+        {
+          "bbox": [
+            1058,
+            92,
+            125,
+            156
+          ],
+          "area_px": 10793.0,
+          "diameter_mm": 38.435,
+          "aspect_ratio": 1.248,
+          "roundness": 0.514,
+          "shine_index": 39.91
+        },
+        {
+          "bbox": [
+            948,
+            83,
+            63,
+            89
+          ],
+          "area_px": 2526.5,
+          "diameter_mm": 18.596,
+          "aspect_ratio": 1.413,
+          "roundness": 0.439,
+          "shine_index": 44.11
+        },
+        {
+          "bbox": [
+            709,
+            71,
+            43,
+            47
+          ],
+          "area_px": 1461.5,
+          "diameter_mm": 14.143,
+          "aspect_ratio": 1.093,
+          "roundness": 0.86,
+          "shine_index": 44.33
+        },
+        {
+          "bbox": [
+            1146,
+            69,
+            26,
+            29
+          ],
+          "area_px": 479.5,
+          "diameter_mm": 8.101,
+          "aspect_ratio": 1.115,
+          "roundness": 0.847,
+          "shine_index": 36.2
+        }
+      ]
+    },
+    "grid_box_analysis": {
+      "available": true,
+      "calibration_source": "aruco-grid",
+      "sheet_style": "precision-white",
+      "active_field": {
+        "bbox": [
+          0,
+          0,
+          1280,
+          960
+        ],
+        "source": "grain-mask-field",
+        "width_mm": 419.67,
+        "height_mm": 314.76,
+        "major_cell_mm": 10.0,
+        "major_rows": 31,
+        "major_cols": 42,
+        "major_occupied_cells": 1254,
+        "major_total_cells": 1302,
+        "major_max_fill_ratio": 1.0,
+        "major_mean_fill_ratio": 0.6655,
+        "densest_major_cell": {
+          "row": 1,
+          "col": 3,
+          "fill_ratio": 1.0
+        },
+        "minor_cell_mm": 1.0,
+        "minor_rows": 315,
+        "minor_cols": 420,
+        "minor_occupied_cells": 93937,
+        "minor_total_cells": 132300
+      },
+      "grain_count": 44,
+      "median_diameter_mm": 9.367,
+      "p90_diameter_mm": 18.845,
+      "per_grain_grid_samples": [
+        {
+          "bbox": [
+            453,
+            917,
+            80,
+            43
+          ],
+          "diameter_mm": 15.2,
+          "width_mm": 26.23,
+          "height_mm": 14.098,
+          "active_major_cell": {
+            "row": 31,
+            "col": 17,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 309,
+            "col": 163,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            554,
+            905,
+            37,
+            55
+          ],
+          "diameter_mm": 14.051,
+          "width_mm": 12.131,
+          "height_mm": 18.033,
+          "active_major_cell": {
+            "row": 31,
+            "col": 19,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 307,
+            "col": 188,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            1276,
+            816,
+            4,
+            3
+          ],
+          "diameter_mm": 0.827,
+          "width_mm": 1.311,
+          "height_mm": 0.984,
+          "active_major_cell": {
+            "row": 27,
+            "col": 42,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 268,
+            "col": 419,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            493,
+            807,
+            3,
+            4
+          ],
+          "diameter_mm": 0.74,
+          "width_mm": 0.984,
+          "height_mm": 1.311,
+          "active_major_cell": {
+            "row": 27,
+            "col": 17,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 266,
+            "col": 162,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            841,
+            800,
+            4,
+            4
+          ],
+          "diameter_mm": 0.979,
+          "width_mm": 1.311,
+          "height_mm": 1.311,
+          "active_major_cell": {
+            "row": 27,
+            "col": 28,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 263,
+            "col": 277,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            12,
+            769,
+            5,
+            10
+          ],
+          "diameter_mm": 1.433,
+          "width_mm": 1.639,
+          "height_mm": 3.279,
+          "active_major_cell": {
+            "row": 26,
+            "col": 1,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 254,
+            "col": 5,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            938,
+            761,
+            6,
+            3
+          ],
+          "diameter_mm": 1.046,
+          "width_mm": 1.967,
+          "height_mm": 0.984,
+          "active_major_cell": {
+            "row": 25,
+            "col": 31,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 250,
+            "col": 309,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            0,
+            735,
+            6,
+            23
+          ],
+          "diameter_mm": 3.117,
+          "width_mm": 1.967,
+          "height_mm": 7.541,
+          "active_major_cell": {
+            "row": 25,
+            "col": 1,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 245,
+            "col": 1,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            1274,
+            512,
+            6,
+            21
+          ],
+          "diameter_mm": 2.642,
+          "width_mm": 1.967,
+          "height_mm": 6.885,
+          "active_major_cell": {
+            "row": 18,
+            "col": 42,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 172,
+            "col": 419,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            80,
+            493,
+            7,
+            7
+          ],
+          "diameter_mm": 1.255,
+          "width_mm": 2.295,
+          "height_mm": 2.295,
+          "active_major_cell": {
+            "row": 17,
+            "col": 3,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 163,
+            "col": 28,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            941,
+            485,
+            3,
+            4
+          ],
+          "diameter_mm": 0.74,
+          "width_mm": 0.984,
+          "height_mm": 1.311,
+          "active_major_cell": {
+            "row": 16,
+            "col": 31,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 160,
+            "col": 309,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            0,
+            448,
+            21,
+            45
+          ],
+          "diameter_mm": 8.505,
+          "width_mm": 6.885,
+          "height_mm": 14.754,
+          "active_major_cell": {
+            "row": 16,
+            "col": 1,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 155,
+            "col": 3,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            484,
+            427,
+            8,
+            7
+          ],
+          "diameter_mm": 1.48,
+          "width_mm": 2.623,
+          "height_mm": 2.295,
+          "active_major_cell": {
+            "row": 15,
+            "col": 16,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 141,
+            "col": 160,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            329,
+            336,
+            35,
+            39
+          ],
+          "diameter_mm": 10.761,
+          "width_mm": 11.475,
+          "height_mm": 12.787,
+          "active_major_cell": {
+            "row": 12,
+            "col": 12,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 117,
+            "col": 114,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            1267,
+            327,
+            13,
+            69
+          ],
+          "diameter_mm": 9.334,
+          "width_mm": 4.262,
+          "height_mm": 22.623,
+          "active_major_cell": {
+            "row": 12,
+            "col": 42,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 119,
+            "col": 418,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            332,
+            309,
+            4,
+            3
+          ],
+          "diameter_mm": 0.74,
+          "width_mm": 1.311,
+          "height_mm": 0.984,
+          "active_major_cell": {
+            "row": 11,
+            "col": 11,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 102,
+            "col": 110,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            560,
+            301,
+            4,
+            3
+          ],
+          "diameter_mm": 0.74,
+          "width_mm": 1.311,
+          "height_mm": 0.984,
+          "active_major_cell": {
+            "row": 10,
+            "col": 19,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 100,
+            "col": 185,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            1162,
+            243,
+            28,
+            31
+          ],
+          "diameter_mm": 9.4,
+          "width_mm": 9.18,
+          "height_mm": 10.164,
+          "active_major_cell": {
+            "row": 9,
+            "col": 39,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 85,
+            "col": 386,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            912,
+            240,
+            4,
+            3
+          ],
+          "diameter_mm": 0.74,
+          "width_mm": 1.311,
+          "height_mm": 0.984,
+          "active_major_cell": {
+            "row": 8,
+            "col": 30,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 80,
+            "col": 300,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            984,
+            229,
+            33,
+            37
+          ],
+          "diameter_mm": 10.623,
+          "width_mm": 10.82,
+          "height_mm": 12.131,
+          "active_major_cell": {
+            "row": 9,
+            "col": 33,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 81,
+            "col": 329,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            985,
+            162,
+            52,
+            46
+          ],
+          "diameter_mm": 14.146,
+          "width_mm": 17.049,
+          "height_mm": 15.082,
+          "active_major_cell": {
+            "row": 7,
+            "col": 34,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 61,
+            "col": 332,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            721,
+            139,
+            32,
+            37
+          ],
+          "diameter_mm": 10.846,
+          "width_mm": 10.492,
+          "height_mm": 12.131,
+          "active_major_cell": {
+            "row": 6,
+            "col": 25,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 52,
+            "col": 242,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            518,
+            132,
+            4,
+            3
+          ],
+          "diameter_mm": 0.74,
+          "width_mm": 1.311,
+          "height_mm": 0.984,
+          "active_major_cell": {
+            "row": 5,
+            "col": 18,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 44,
+            "col": 171,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            295,
+            113,
+            142,
+            75
+          ],
+          "diameter_mm": 26.371,
+          "width_mm": 46.558,
+          "height_mm": 24.59,
+          "active_major_cell": {
+            "row": 5,
+            "col": 12,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 49,
+            "col": 118,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            604,
+            105,
+            44,
+            59
+          ],
+          "diameter_mm": 15.913,
+          "width_mm": 14.426,
+          "height_mm": 19.344,
+          "active_major_cell": {
+            "row": 5,
+            "col": 21,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 44,
+            "col": 206,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            821,
+            104,
+            44,
+            58
+          ],
+          "diameter_mm": 14.29,
+          "width_mm": 14.426,
+          "height_mm": 19.016,
+          "active_major_cell": {
+            "row": 5,
+            "col": 28,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 44,
+            "col": 276,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            1058,
+            92,
+            125,
+            156
+          ],
+          "diameter_mm": 38.435,
+          "width_mm": 40.984,
+          "height_mm": 51.148,
+          "active_major_cell": {
+            "row": 6,
+            "col": 37,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 56,
+            "col": 369,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            948,
+            83,
+            63,
+            89
+          ],
+          "diameter_mm": 18.596,
+          "width_mm": 20.656,
+          "height_mm": 29.18,
+          "active_major_cell": {
+            "row": 5,
+            "col": 33,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 42,
+            "col": 321,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            709,
+            71,
+            43,
+            47
+          ],
+          "diameter_mm": 14.143,
+          "width_mm": 14.098,
+          "height_mm": 15.41,
+          "active_major_cell": {
+            "row": 4,
+            "col": 24,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 31,
+            "col": 240,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            1146,
+            69,
+            26,
+            29
+          ],
+          "diameter_mm": 8.101,
+          "width_mm": 8.525,
+          "height_mm": 9.508,
+          "active_major_cell": {
+            "row": 3,
+            "col": 39,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 27,
+            "col": 381,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            57,
+            64,
+            29,
+            25
+          ],
+          "diameter_mm": 8.306,
+          "width_mm": 9.508,
+          "height_mm": 8.197,
+          "active_major_cell": {
+            "row": 3,
+            "col": 3,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 25,
+            "col": 24,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            229,
+            56,
+            44,
+            52
+          ],
+          "diameter_mm": 14.433,
+          "width_mm": 14.426,
+          "height_mm": 17.049,
+          "active_major_cell": {
+            "row": 3,
+            "col": 9,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 27,
+            "col": 83,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            1032,
+            49,
+            31,
+            39
+          ],
+          "diameter_mm": 10.162,
+          "width_mm": 10.164,
+          "height_mm": 12.787,
+          "active_major_cell": {
+            "row": 3,
+            "col": 35,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 23,
+            "col": 344,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            1228,
+            30,
+            52,
+            178
+          ],
+          "diameter_mm": 28.062,
+          "width_mm": 17.049,
+          "height_mm": 58.361,
+          "active_major_cell": {
+            "row": 4,
+            "col": 42,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 38,
+            "col": 412,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            642,
+            28,
+            58,
+            48
+          ],
+          "diameter_mm": 16.022,
+          "width_mm": 19.016,
+          "height_mm": 15.738,
+          "active_major_cell": {
+            "row": 2,
+            "col": 22,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 18,
+            "col": 220,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            168,
+            18,
+            54,
+            71
+          ],
+          "diameter_mm": 18.489,
+          "width_mm": 17.705,
+          "height_mm": 23.279,
+          "active_major_cell": {
+            "row": 2,
+            "col": 7,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 19,
+            "col": 65,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            1120,
+            6,
+            50,
+            63
+          ],
+          "diameter_mm": 14.661,
+          "width_mm": 16.393,
+          "height_mm": 20.656,
+          "active_major_cell": {
+            "row": 2,
+            "col": 38,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 14,
+            "col": 376,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            1226,
+            0,
+            54,
+            18
+          ],
+          "diameter_mm": 8.944,
+          "width_mm": 17.705,
+          "height_mm": 5.902,
+          "active_major_cell": {
+            "row": 1,
+            "col": 42,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 3,
+            "col": 413,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            847,
+            0,
+            229,
+            152
+          ],
+          "diameter_mm": 43.293,
+          "width_mm": 75.082,
+          "height_mm": 49.836,
+          "active_major_cell": {
+            "row": 2,
+            "col": 31,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 15,
+            "col": 310,
+            "cell_mm": 1.0
+          }
+        },
+        {
+          "bbox": [
+            782,
+            0,
+            38,
+            17
+          ],
+          "diameter_mm": 7.381,
+          "width_mm": 12.459,
+          "height_mm": 5.574,
+          "active_major_cell": {
+            "row": 1,
+            "col": 27,
+            "cell_mm": 10.0
+          },
+          "active_minor_cell": {
+            "row": 3,
+            "col": 262,
+            "cell_mm": 1.0
+          }
+        }
+      ],
+      "big_sheet_grid": {
+        "available": true,
+        "bbox": [
+          308,
+          459,
+          949,
+          397
+        ],
+        "major_cell_mm": 10.0,
+        "major_spacing_px": 30.5,
+        "estimated_cols": 31,
+        "estimated_rows": 13,
+        "source": "detected-sheet1-major-grid"
+      }
+    }
+  },
+  "confidence": 89,
+  "timestamp": "2026-05-03T21:46:35.383334",
+  "device_model": "Auto",
+  "batch_id": "BATCH-20260503214628",
+  "notes": ""
+}

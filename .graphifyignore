@@ -1,0 +1,14 @@
+.git/
+.dist/
+__MACOSX/
+graphify-out/
+
+.claude/
+.codex/
+__pycache__/
+*.pyc
+
+*.env
+.env
+rag_index.npz
+rag_chunks.jsonl

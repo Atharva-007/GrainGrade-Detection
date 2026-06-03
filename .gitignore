@@ -5,3 +5,12 @@ __pycache__/
 __MACOSX/
 .dist/
 *.log
+.hf-cache/
+.tmp_streamlit_test/
+tmp2a5sfseq/
+tmp81f78zpr/
+tmpl7imlqgf/
+feedback_data/session_uploads/
+graphify-out/cache/
+# Added by code-review-graph
+.code-review-graph/
