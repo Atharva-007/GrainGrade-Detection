@@ -1754,14 +1754,23 @@ class PhysicsProxiesExtractor:
         masked_a = a_channel[mask > 0.5]
         masked_b = b_channel[mask > 0.5]
 
-        l_mean = np.mean(masked_l)
-        l_std = np.std(masked_l)
-        a_mean = np.mean(masked_a)
-        b_mean = np.mean(masked_b)
+        if masked_l.size == 0:
+            return {
+                "l_mean": 255.0,
+                "l_std": 0.0,
+                "a_mean": 128.0,
+                "b_mean": 128.0,
+                "color_darkness_index": 0.0,
+            }
+
+        l_mean = float(np.mean(masked_l))
+        l_std = float(np.std(masked_l))
+        a_mean = float(np.mean(masked_a))
+        b_mean = float(np.mean(masked_b))
 
         # Darkness index: inverted L* (higher = darker grain = higher moisture)
         # Normalize L* to 0-100 scale
-        color_darkness_index = 100 - (l_mean / 255.0) * 100
+        color_darkness_index = float(np.clip(100 - (l_mean / 255.0) * 100, 0.0, 100.0))
 
         return {
             "l_mean": l_mean,

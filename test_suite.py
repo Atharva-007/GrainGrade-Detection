@@ -15,6 +15,7 @@ import json
 import numpy as np
 import shutil
 import uuid
+import warnings
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
@@ -75,12 +76,32 @@ class TestPhysicsProxies:
         result = extractor.extract_all_proxies(dummy_image)
         lab = result["lab_features"]
 
-        # OpenCV LAB range: [0, 255]. Allow NaN for small/empty images.
-        import math
-        if not math.isnan(lab["l_mean"]):
-            assert 0 <= lab["l_mean"] <= 255, f"L* {lab['l_mean']} out of range"
-        if not math.isnan(lab["color_darkness_index"]):
-            assert 0 <= lab["color_darkness_index"] <= 100, "Darkness index out of range"
+        # OpenCV LAB range: [0, 255]. Empty masks return finite neutral defaults.
+        assert np.isfinite(lab["l_mean"])
+        assert np.isfinite(lab["color_darkness_index"])
+        assert 0 <= lab["l_mean"] <= 255, f"L* {lab['l_mean']} out of range"
+        assert 0 <= lab["color_darkness_index"] <= 100, "Darkness index out of range"
+
+    def test_blank_image_returns_finite_defaults_without_runtime_warnings(self, extractor, tmp_path):
+        """Bad photos with no segmented grain should not produce NaN proxy values."""
+        import cv2
+
+        blank_path = tmp_path / "blank.jpg"
+        blank = np.full((160, 160, 3), 255, dtype=np.uint8)
+        cv2.imwrite(str(blank_path), blank)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            result = extractor.extract_all_proxies(str(blank_path))
+
+        lab = result["lab_features"]
+        assert result["grain_mask_coverage"] == 0.0
+        assert lab["l_mean"] == 255.0
+        assert lab["l_std"] == 0.0
+        assert lab["color_darkness_index"] == 0.0
+        assert result["clumping"]["density"] == 0.0
+        assert result["roughness_score"] == 0.0
+        assert result["uniformity_score"] == 0.0
 
     def test_clumping_density_valid(self, extractor, dummy_image):
         """Test clumping density is 0-1."""
