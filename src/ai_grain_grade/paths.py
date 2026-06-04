@@ -10,7 +10,6 @@ PROJECT_ROOT = PACKAGE_ROOT.parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 RAG_DATA_DIR = DATA_DIR / "rag"
 RAG_INDEX_PATH = RAG_DATA_DIR / "rag_index.json"
-RAG_EMBEDDINGS_PATH = RAG_DATA_DIR / "rag_index.embeddings.npz"
 
 FEEDBACK_DIR = DATA_DIR / "feedback" / "feedback_data"
 SESSION_UPLOADS_DIR = FEEDBACK_DIR / "session_uploads"

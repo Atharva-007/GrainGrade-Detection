@@ -29,7 +29,6 @@ from typing import Optional, Dict, Any, Tuple
 from dotenv import load_dotenv
 
 import cv2
-import httpx
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageOps
@@ -44,7 +43,7 @@ from .paths import (
 )
 from .physics_proxies import PhysicsProxiesExtractor
 from .vision_rag_pipeline import VisionRAGPipeline, MoistureRisk, QualityGrade
-from .lora_finetune import FeedbackCollector, GradingFeedbackItem
+from .feedback import FeedbackCollector, GradingFeedbackItem
 
 # Load environment variables
 load_dotenv(PROJECT_ROOT / ".env")
@@ -61,6 +60,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_QWEN_PROVIDER = "dashscope"
 DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 DEFAULT_SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
+CLOUD_QWEN_PROVIDERS = {"dashscope", "siliconflow", "custom"}
 
 
 def _first_env(*names: str, default: str = "") -> str:
@@ -71,16 +71,22 @@ def _first_env(*names: str, default: str = "") -> str:
     return default
 
 
-def _qwen_runtime_config() -> Dict[str, Any]:
-    provider = os.getenv("QWEN_VL_PROVIDER", DEFAULT_QWEN_PROVIDER).strip().lower()
-    if provider not in {"dashscope", "siliconflow", "ollama", "custom"}:
-        provider = "custom"
+def _is_local_base_url(url: str) -> bool:
+    text = str(url or "").lower()
+    return any(marker in text for marker in ("localhost", "127.0.0.1", "0.0.0.0", "[::1]", "::1"))
 
-    if provider == "ollama":
-        model = os.getenv("QWEN_VL_MODEL", "qwen3-vl:8b")
-        base_url = os.getenv("QWEN_VL_BASE_URL", "http://localhost:11434/v1")
-        api_key = os.getenv("QWEN_VL_API_KEY", "")
-    elif provider == "siliconflow":
+
+def _qwen_runtime_config() -> Dict[str, Any]:
+    requested_provider = os.getenv("QWEN_VL_PROVIDER", DEFAULT_QWEN_PROVIDER).strip().lower()
+    provider = requested_provider if requested_provider in CLOUD_QWEN_PROVIDERS else DEFAULT_QWEN_PROVIDER
+    provider_warning = ""
+    if requested_provider and requested_provider not in CLOUD_QWEN_PROVIDERS:
+        provider_warning = (
+            f"Provider `{requested_provider}` is not supported in this cloud-only build; "
+            f"using `{provider}`."
+        )
+
+    if provider == "siliconflow":
         model = os.getenv("QWEN_VL_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
         base_url = _first_env(
             "QWEN_VL_BASE_URL",
@@ -97,12 +103,19 @@ def _qwen_runtime_config() -> Dict[str, Any]:
         )
         api_key = _first_env("QWEN_VL_API_KEY", "DASHSCOPE_API_KEY")
 
+    local_url_blocked = False
+    if _is_local_base_url(base_url):
+        local_url_blocked = True
+        base_url = ""
+
     return {
         "provider": provider,
+        "requested_provider": requested_provider,
         "model": model,
         "base_url": base_url,
         "api_key": api_key,
-        "is_ollama": provider == "ollama",
+        "provider_warning": provider_warning,
+        "local_url_blocked": local_url_blocked,
         "label": f"{provider}/{model}",
     }
 
@@ -3745,7 +3758,7 @@ st.markdown(
 
 
 def render_cyber_header(status: Dict[str, Any], show_trace: bool):
-    provider_text = "Local Qwen3-VL" if status.get("provider") == "ollama" else "Cloud Qwen3-VL"
+    provider_text = "Cloud Qwen3-VL"
     st.markdown(
         f"""
         <div class="workstation-header">
@@ -3759,7 +3772,7 @@ def render_cyber_header(status: Dict[str, Any], show_trace: bool):
                 </div>
                 <div class="header-meta">
                     <div style="font-size: 0.76rem; color: var(--app-muted);">
-                        {html.escape(provider_text)} · bge-m3 RAG
+                        {html.escape(provider_text)} · rule RAG
                     </div>
                     <div class="trace-btn">{"Workflow open" if show_trace else "Workflow ready"}</div>
                 </div>
@@ -3779,7 +3792,7 @@ def render_cyber_hero():
                 <div class="hero-title">Ragi batch decision workspace</div>
                 <div class="hero-body">
                     Grade the current lot, inspect moisture risk, review evidence, and capture corrections without leaving the primary workflow.
-                    <div class="hero-mini">OpenCV proxies | bge-m3 rules | Qwen3-VL | deterministic threshold gate</div>
+                    <div class="hero-mini">OpenCV proxies | rule retrieval | cloud Qwen3-VL | deterministic threshold gate</div>
                 </div>
             </div>
             <div class="hero-grid">
@@ -3857,7 +3870,7 @@ def render_result_banner(grading_result, confidence_threshold: int):
 
 @st.cache_resource
 def init_local_stack():
-    """Initialize the physics extractor and configured Vision-RAG runtime."""
+    """Initialize the physics extractor and configured cloud Qwen runtime."""
     qwen_cfg = _qwen_runtime_config()
     extractor = PhysicsProxiesExtractor(
         grain_mask_threshold=50,
@@ -3870,9 +3883,6 @@ def init_local_stack():
         qwen_base_url=qwen_cfg["base_url"],
         qwen_api_key=qwen_cfg["api_key"],
         vector_db_type="local",
-        use_ollama=qwen_cfg["is_ollama"],
-        ollama_url=qwen_cfg["base_url"] or "http://localhost:11434/v1",
-        local_vlm_enabled=qwen_cfg["is_ollama"],
         rag_retrieval_mode="lexical",
     )
 
@@ -3881,7 +3891,7 @@ def init_local_stack():
 
 @st.cache_resource
 def get_feedback_collector():
-    """Keep feedback storage available without booting the local model stack."""
+    """Keep feedback storage available without initializing the cloud client."""
     return FeedbackCollector(storage_path=str(FEEDBACK_DIR))
 
 
@@ -3904,60 +3914,40 @@ def get_runtime_status() -> Dict[str, Any]:
     """Return runtime and knowledge-base status for the UI."""
     qwen_cfg = _qwen_runtime_config()
     status = {
-        "ollama_online": False,
         "runtime_online": False,
         "model_ready": False,
         "runtime_label": "Offline",
-        "runtime_detail": "Qwen-VL runtime is not configured.",
+        "runtime_detail": "Cloud Qwen-VL runtime is not configured.",
         "chunk_count": _load_rag_chunk_count(),
         "provider": qwen_cfg["provider"],
         "model": qwen_cfg["model"],
         "provider_label": qwen_cfg["label"],
     }
-    if not qwen_cfg["is_ollama"]:
-        if qwen_cfg["api_key"] and qwen_cfg["base_url"] and qwen_cfg["model"]:
-            status["runtime_online"] = True
-            status["ollama_online"] = True
-            status["model_ready"] = True
-            status["runtime_label"] = "Cloud Ready"
-            status["runtime_detail"] = (
-                f"{qwen_cfg['provider']} is configured for {qwen_cfg['model']}. "
-                "The app will call the cloud Qwen-VL endpoint during analysis."
-            )
-        else:
-            missing = []
-            if not qwen_cfg["api_key"]:
-                missing.append("API key")
-            if not qwen_cfg["base_url"]:
-                missing.append("base URL")
-            if not qwen_cfg["model"]:
-                missing.append("model")
-            status["runtime_label"] = "Cloud Config Needed"
-            status["runtime_detail"] = (
-                f"Missing {', '.join(missing)} for {qwen_cfg['provider']} Qwen-VL."
-            )
-        return status
-
-    try:
-        response = httpx.get("http://127.0.0.1:11434/api/tags", timeout=1.5)
-        response.raise_for_status()
-        models = [
-            model.get("name", "")
-            for model in response.json().get("models", [])
-            if isinstance(model, dict)
-        ]
-        status["ollama_online"] = True
+    if qwen_cfg["api_key"] and qwen_cfg["base_url"] and qwen_cfg["model"]:
         status["runtime_online"] = True
-        expected_model = qwen_cfg["model"].lower()
-        if any(expected_model in name.lower() or "qwen3-vl" in name.lower() for name in models):
-            status["model_ready"] = True
-            status["runtime_label"] = "Ready"
-            status["runtime_detail"] = "Ollama is online and a Qwen3-VL model is listed."
-        else:
-            status["runtime_label"] = "Service Online"
-            status["runtime_detail"] = f"Ollama is reachable, but `{qwen_cfg['model']}` was not found in the local tag list."
-    except Exception:
-        pass
+        status["model_ready"] = True
+        status["runtime_label"] = "Cloud Ready"
+        status["runtime_detail"] = (
+            f"{qwen_cfg['provider']} is configured for {qwen_cfg['model']}. "
+            "The app will call the cloud Qwen-VL endpoint during analysis."
+        )
+        if qwen_cfg["provider_warning"]:
+            status["runtime_detail"] = f"{qwen_cfg['provider_warning']} {status['runtime_detail']}"
+    else:
+        missing = []
+        if not qwen_cfg["api_key"]:
+            missing.append("API key")
+        if not qwen_cfg["base_url"]:
+            missing.append("cloud base URL")
+        if not qwen_cfg["model"]:
+            missing.append("model")
+        status["runtime_label"] = "Cloud Config Needed"
+        detail = f"Missing {', '.join(missing)} for {qwen_cfg['provider']} Qwen-VL."
+        if qwen_cfg["provider_warning"]:
+            detail = f"{qwen_cfg['provider_warning']} {detail}"
+        if qwen_cfg["local_url_blocked"]:
+            detail = f"{detail} Localhost Qwen endpoints are disabled in this build."
+        status["runtime_detail"] = detail
     return status
 
 
@@ -4870,14 +4860,14 @@ def render_theme_overrides(dark_mode: bool) -> None:
 def render_hero(status: Dict[str, Any], pending_feedback: int):
     runtime_class = "status-online" if status["model_ready"] else "status-warn" if status.get("runtime_online") else "status-alert"
     model_label = html.escape(status.get("provider_label", "qwen-vl"))
-    hero_title = "Local lot grading, live feedback." if status.get("provider") == "ollama" else "Cloud lot grading, live feedback."
+    hero_title = "Cloud lot grading, live feedback."
     st.markdown(
         f"""
         <div class="app-hero">
             <div class="hero-eyebrow">Millets Now • Ragi Lot Grader</div>
             <div class="hero-title">{hero_title}</div>
             <div class="hero-body">
-                Upload one photo. The engine checks grade, moisture risk, and the next action with bge-m3 rule retrieval and operator feedback.
+                Upload one photo. The engine checks grade, moisture risk, and the next action with local rule retrieval and operator feedback.
                 <div class="hero-mini">Compact workflow: one image in, one decision out, corrections reused automatically.</div>
             </div>
             <div class="pill-row">
@@ -4946,10 +4936,6 @@ def _decision_state(grading_result, confidence_threshold: int) -> Dict[str, str]
 def render_result_banner(grading_result, confidence_threshold: int):
     grade_val = grading_result.quality_grade.value
     grade_class = "grade-a" if grade_val == "A" else "grade-b" if grade_val == "B" else "grade-c"
-    is_fast_rules = (
-        "proxyfast" in grading_result.model_version
-        or "bge-m3-rules" in grading_result.model_version
-    )
     moisture_val = grading_result.moisture_risk.value
     moisture_class = {
         "LOW": "moisture-low",
@@ -5216,10 +5202,10 @@ def run_streamlit_async_inference(
     stream_callback,
 ):
     """
-    Exact Streamlit wrapper for async Ollama inference.
+    Streamlit wrapper for cloud Qwen inference.
 
     Standard Streamlit scripts are synchronous, so the button handler bridges
-    into the async httpx streaming pipeline with asyncio.run().
+    into the async pipeline with asyncio.run().
     """
     return asyncio.run(
         pipeline.infer_async(
@@ -5322,7 +5308,7 @@ def render_workflow_panel(
         (
             "04",
             "RAG rule retrieval",
-            f"bge-m3/local retrieval supplies {rag_chunks_used} rule chunk(s) for the grading prompt.",
+            f"Local rule retrieval supplies {rag_chunks_used} chunk(s) for the grading prompt.",
         ),
         (
             "05",
@@ -5345,7 +5331,7 @@ def render_workflow_panel(
         (
             "08",
             "Feedback loop",
-            f"{pending_feedback} correction file(s) are available for similar-sample reuse and future LoRA training.",
+            f"{pending_feedback} correction file(s) are available for similar-sample reuse and audit review.",
         ),
     ]
     step_html = "".join(
@@ -5364,7 +5350,7 @@ def render_workflow_panel(
     detail_tiles = [
         ("Runtime", status["runtime_label"]),
         ("Model", model_version),
-        ("Embedding", "BAAI/bge-m3"),
+        ("Retrieval", "Lexical RAG"),
         ("Rules", f"{status['chunk_count']} chunks"),
         ("Batch", _detail_value((auto_meta or {}).get("batch_id"))),
         ("Grade", grade),
@@ -5464,29 +5450,11 @@ confidence_threshold = int(st.session_state.get("confidence_threshold", 60))
 if workspace == "Inspect Batch":
     if not runtime_status["model_ready"]:
         with st.container(border=True):
-            if runtime_status.get("provider") == "ollama" and runtime_status["ollama_online"]:
-                st.warning(
-                    "Ollama is reachable, but the local vision model is not ready. "
-                    f"Load `{runtime_status.get('model', 'qwen3-vl:8b')}` into Ollama, then refresh this page."
-                )
-                st.code(
-                    "ollama serve\nollama list",
-                    language="bash",
-                )
-            elif runtime_status.get("provider") == "ollama":
-                st.error(
-                    "Local Ollama is offline on port 11434. Start the runtime before running grain analysis."
-                )
-                st.code(
-                    "ollama serve\nollama list",
-                    language="bash",
-                )
-            else:
-                st.error(runtime_status["runtime_detail"])
-                st.code(
-                    "QWEN_VL_PROVIDER=dashscope\nQWEN_VL_MODEL=qwen3-vl-plus\nQWEN_VL_API_KEY=...\n# optional: QWEN_VL_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-                    language="bash",
-                )
+            st.error(runtime_status["runtime_detail"])
+            st.code(
+                "QWEN_VL_PROVIDER=dashscope\nQWEN_VL_MODEL=qwen3-vl-plus\nQWEN_VL_API_KEY=...\n# optional: QWEN_VL_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+                language="bash",
+            )
 
     col1, col2 = st.columns([1.02, 0.98], gap="medium")
     file_signature = None
@@ -5707,11 +5675,6 @@ if workspace == "Inspect Batch":
         if analysis_payload and analysis_payload.get("file_signature") == file_signature:
             grading_result = analysis_payload["grading_result"]
             proxies = analysis_payload["proxies"]
-            is_proxyfast = (
-                "proxyfast" in grading_result.model_version
-                or "bge-m3-rules" in grading_result.model_version
-            )
-
             st.markdown('<div class="result-transition"></div>', unsafe_allow_html=True)
             decision_action_left, decision_action_right = st.columns([0.78, 0.22], gap="medium")
             with decision_action_left:
@@ -5851,7 +5814,7 @@ if workspace == "Inspect Batch":
             st.divider()
             with st.container(border=True):
                 st.subheader("Operator correction")
-                st.caption("If the model decision is incorrect, record the fix here. This correction is used for future training.")
+                st.caption("If the cloud model decision is incorrect, record the fix here. Similar future samples will include this correction context.")
                 
                 with st.form("integrated_correction"):
                     f_col1, f_col2 = st.columns(2)
@@ -5887,7 +5850,7 @@ elif workspace == "Review Corrections":
     render_section_intro(
         "Review Corrections",
         "Correction queue",
-        "Review the latest decision, save operator corrections, and track training-ready feedback.",
+        "Review the latest decision, save operator corrections, and track cloud-runtime feedback.",
     )
 
     control_left, control_center, control_right = st.columns([0.18, 0.64, 0.18])
@@ -5896,7 +5859,7 @@ elif workspace == "Review Corrections":
             st.markdown(
                 """
                 <div class="control-title">Analysis controls</div>
-                <div class="control-subtitle">Set the review floor before running local grading.</div>
+                <div class="control-subtitle">Set the review floor before running cloud grading.</div>
                 """,
                 unsafe_allow_html=True,
             )
@@ -5963,7 +5926,7 @@ elif workspace == "Review Corrections":
             if feedback_collector.submit_feedback(feedback_item):
                 st.success("Correction saved")
                 st.info(
-                    f"Pending corrections: {feedback_collector.get_pending_count()}/500 before the next training cycle"
+                    f"Pending corrections: {feedback_collector.get_pending_count()}/500 before queue review"
                 )
             else:
                 st.error("Failed to submit feedback")
@@ -5976,23 +5939,23 @@ elif workspace == "Review Corrections":
     st.subheader("Correction Queue")
 
     pending_count = feedback_collector.get_pending_count()
-    training_threshold = 500
+    review_threshold = 500
 
     col_stat1, col_stat2, col_stat3 = st.columns(3)
     with col_stat1:
         st.metric("Pending Corrections", pending_count)
     with col_stat2:
-        st.metric("Training Threshold", training_threshold)
+        st.metric("Review Threshold", review_threshold)
     with col_stat3:
-        progress = min(100, int(pending_count / training_threshold * 100))
-        st.metric("Progress to Training", f"{progress}%")
+        progress = min(100, int(pending_count / review_threshold * 100))
+        st.metric("Progress to Review", f"{progress}%")
 
     # Progress bar
     st.progress(progress / 100.0)
 
     if progress >= 100:
         st.warning(
-            "Training threshold reached. You can trigger the next LoRA run from the sidebar."
+            "Review threshold reached. Export or review the correction queue before the next deployment."
         )
 
     correction_patterns = feedback_collector.summarize_feedback_patterns(limit=4)
@@ -6069,7 +6032,7 @@ else:
             """
         ## System Layout
 
-        **Millets Now** is a local-first ragi lot grading system built around:
+        **Millets Now** is a cloud-Qwen ragi lot grading system built around:
 
         1. **Physics Proxies Extraction**
            - Texture entropy
@@ -6088,7 +6051,7 @@ else:
         4. **Correction Loop**
            - Stores operator fixes
            - Reuses similar fixes during later inference
-           - Prepares LoRA fine-tuning data
+           - Keeps a JSON audit queue for later review
         """
         )
 
@@ -6106,10 +6069,10 @@ else:
 - Text-only JSON repair pass when the model spends tokens in reasoning
 - Deterministic grade logic layered on top of model output
 
-# Training loop
-- Corrections stored locally
-- Similar corrections retrieved during later inference
-- LoRA training triggered after enough operator feedback
+# Feedback loop
+- Corrections stored as JSON records
+- Similar corrections retrieved during later cloud inference
+- Correction volume is tracked for audit review
                 """,
                 language="python",
             )

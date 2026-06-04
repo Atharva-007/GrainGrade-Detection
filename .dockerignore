@@ -1,0 +1,55 @@
+# Secrets and local environment
+.env
+.env.*
+*.env
+
+# VCS and agent/tool state
+.git/
+.code-review-graph/
+graphify-out/
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Logs and local Streamlit output
+*.log
+*.pid
+.streamlit-run*.log
+.streamlit-run*.out.log
+.streamlit-run*.err.log
+streamlit-*.log
+streamlit-*.out.log
+streamlit-*.err.log
+streamlit-app.log
+streamlit-app.err.log
+
+# Local caches and temporary directories
+.hf-cache/
+.cache/
+.tmp_streamlit_test/
+tmp*/
+tmp2a5sfseq/
+tmp81f78zpr/
+tmpl7imlqgf/
+__MACOSX__/
+.dist/
+
+# Runtime state and excluded model artifacts
+data/feedback/feedback_data/
+data/rag/*.embeddings.npz
+models/
+
+# Non-runtime project material
+docs/archive/
+docs/prompts/
+docs/specs/
+legacy/
+scripts/
+supabase/
+tests/

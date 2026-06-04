@@ -26,12 +26,7 @@ from ai_grain_grade.vision_rag_pipeline import (
     QualityGrade,
     MoistureRisk,
 )
-from ai_grain_grade.lora_finetune import (
-    RagiLoRAFinetuner,
-    AsymmetricGradingLoss,
-    FeedbackCollector,
-    GradingFeedbackItem,
-)
+from ai_grain_grade.feedback import FeedbackCollector, GradingFeedbackItem
 
 
 class TestPhysicsProxies:
@@ -271,8 +266,8 @@ class TestVisionRAGPipeline:
         assert formatted["moisture"]["risk_level"] == "MODERATE"
 
 
-class TestLoRAFinetuning:
-    """Test LoRA fine-tuning components."""
+class TestFeedbackCollection:
+    """Test cloud-runtime feedback collection components."""
 
     @pytest.fixture
     def feedback_items(self):
@@ -318,51 +313,6 @@ class TestLoRAFinetuning:
             ),
         ]
 
-    def test_asymmetric_loss_computation(self):
-        """Test asymmetric loss function."""
-        import torch
-
-        loss_fn = AsymmetricGradingLoss(false_safe_weight=5.0)
-
-        # Create mock logits and labels
-        logits = torch.tensor([
-            [1.0, 0.5, 0.1],  # Predicts A (0)
-            [0.1, 0.5, 2.0],  # Predicts C (2)
-        ])
-        true_labels = torch.tensor([0, 2])  # True: A, C
-
-        loss = loss_fn(logits, true_labels)
-        assert loss.item() > 0, "Loss should be positive"
-
-    def test_false_safe_penalty(self):
-        """Test that false-safe predictions receive higher penalty."""
-        import torch
-
-        loss_fn = AsymmetricGradingLoss(false_safe_weight=5.0)
-
-        # False-safe: predict A (0) when true is C (2)
-        logits_false_safe = torch.tensor([[1.0, 0.5, 0.1]])
-        labels_false_safe = torch.tensor([2])
-        loss_fs = loss_fn(logits_false_safe, labels_false_safe)
-
-        # False-risky: predict C (2) when true is A (0)
-        logits_false_risky = torch.tensor([[0.1, 0.5, 2.0]])
-        labels_false_risky = torch.tensor([0])
-        loss_fr = loss_fn(logits_false_risky, labels_false_risky)
-
-        # False-safe should have higher loss
-        assert loss_fs.item() > loss_fr.item(), "False-safe should be penalized more"
-
-    def test_farm_based_split(self, feedback_items):
-        """Test farm-based train/test split."""
-        finetuner = RagiLoRAFinetuner()
-        train, test = finetuner.split_by_farm(feedback_items, test_farms=["FARM-B"])
-
-        assert len(train) == 1
-        assert len(test) == 1
-        assert train[0].farm_id == "FARM-A"
-        assert test[0].farm_id == "FARM-B"
-
     def test_feedback_collector(self, feedback_items):
         """Test feedback collection."""
         tmpdir = Path(f".feedback_test_{uuid.uuid4().hex}")
@@ -381,6 +331,19 @@ class TestLoRAFinetuning:
             # Load feedback
             loaded = collector.load_all_feedback()
             assert len(loaded) == len(feedback_items)
+
+            similar = collector.retrieve_similar_feedback(
+                {
+                    "texture_entropy": 2.1,
+                    "lab_features": {"color_darkness_index": 52},
+                    "clumping": {"density": 0.39},
+                    "roughness_score": 42,
+                    "uniformity_score": 51,
+                },
+                limit=1,
+            )
+            assert len(similar) == 1
+            assert similar[0]["sample_id"] == "S002"
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -452,8 +415,8 @@ class TestIntegration:
             except:
                 pass
 
-    def test_feedback_to_training_pipeline(self):
-        """Test feedback collection → model training."""
+    def test_feedback_queue_threshold(self):
+        """Test feedback collection threshold tracking."""
         # Create mock feedback
         feedback_items = [
             GradingFeedbackItem(
@@ -487,9 +450,8 @@ class TestIntegration:
             for item in feedback_items:
                 collector.submit_feedback(item)
 
-            # Check training trigger
-            would_trigger = collector.check_and_trigger_training(threshold=5)
-            assert would_trigger is True
+            should_review = collector.check_review_threshold(threshold=5)
+            assert should_review is True
 
             # Load and verify
             loaded = collector.load_all_feedback()

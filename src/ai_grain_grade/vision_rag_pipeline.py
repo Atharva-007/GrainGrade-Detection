@@ -8,8 +8,8 @@ Two-pass inference engine:
 
 Integrates:
   - Vector DB (Supabase/Pinecone) with .md grading rules
-  - Qwen3-VL/Qwen-VL (cloud OpenAI-compatible API or local Ollama) for vision understanding
-  - Lightweight embeddings (bge-m3) for RAG chunking
+  - Qwen3-VL/Qwen-VL cloud OpenAI-compatible API for vision understanding
+  - Local RAG chunking and retrieval over authoritative rules
   - Deterministic grading logic based on UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md
 
 Author: Copilot
@@ -19,7 +19,6 @@ Date: 2026-04-29
 import os
 import json
 import asyncio
-import inspect
 import logging
 from typing import Dict, List, Tuple, Any, Optional, Callable
 from dataclasses import dataclass, field
@@ -34,7 +33,7 @@ from PIL import Image
 from .paths import FEEDBACK_DIR, RAG_INDEX_PATH
 from .rag_engine import RAGEngine
 from .moisture_calibration import MoistureCalibrator
-from .lora_finetune import FeedbackCollector
+from .feedback import FeedbackCollector
 from .rule_engine import RagiRuleEngine
 
 logging.basicConfig(level=logging.INFO)
@@ -60,6 +59,7 @@ LEGACY_SILICONFLOW_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
 DEFAULT_DASHSCOPE_MODEL = "qwen3-vl-plus"
 DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 DEFAULT_SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
+CLOUD_QWEN_PROVIDERS = {"dashscope", "siliconflow", "custom"}
 
 
 class QualityGrade(str, Enum):
@@ -131,11 +131,8 @@ class VisionRAGPipeline:
         vector_db_type: str = "local",
         vector_db_url: Optional[str] = None,
         vector_db_key: Optional[str] = None,
-        use_ollama: bool = False,
-        ollama_url: str = "http://localhost:11434/v1",
         feedback_storage_path: Optional[str] = None,
-        local_vlm_enabled: bool = False,
-        rag_retrieval_mode: str = "embedding",
+        rag_retrieval_mode: str = "lexical",
         qwen_provider: Optional[str] = None,
         qwen_base_url: Optional[str] = None,
         qwen_api_key: Optional[str] = None,
@@ -146,23 +143,16 @@ class VisionRAGPipeline:
             siliconflow_api_key: Backward-compatible API key for SiliconFlow inference
             qwen_model: Model identifier
             vector_db_type: 'supabase', 'pinecone', or 'local' (JSON fallback)
-            use_ollama: If True, use local Ollama instance
-            ollama_url: Base URL for Ollama's OpenAI-compatible API
-            local_vlm_enabled: If True, local Ollama vision is used. False keeps
-                the app responsive with bge-m3 RAG + deterministic rules.
-            rag_retrieval_mode: 'embedding' for bge-m3 query embeddings or
-                'lexical' for the lightweight local scorer.
-            qwen_provider: 'dashscope', 'siliconflow', 'ollama', or 'custom'.
+            rag_retrieval_mode: 'lexical' for the lightweight local scorer.
+            qwen_provider: 'dashscope', 'siliconflow', or 'custom'.
             qwen_base_url: OpenAI-compatible base URL for cloud providers.
             qwen_api_key: Cloud provider API key. Falls back to env vars.
             qwen_timeout_seconds: HTTP timeout for non-streaming cloud calls.
         """
         provider = (qwen_provider or os.getenv("QWEN_VL_PROVIDER") or "").strip().lower()
-        if use_ollama:
-            provider = "ollama"
         if not provider:
-            provider = "siliconflow"
-        if provider not in {"dashscope", "siliconflow", "ollama", "custom"}:
+            provider = "dashscope"
+        if provider not in CLOUD_QWEN_PROVIDERS:
             logger.warning("Unknown Qwen provider %r; using custom OpenAI-compatible mode", provider)
             provider = "custom"
 
@@ -174,22 +164,11 @@ class VisionRAGPipeline:
 
         self.qwen_provider = provider
         self.qwen_model = qwen_model
-        self.use_ollama = provider == "ollama"
-        self.ollama_url = qwen_base_url or os.getenv("QWEN_VL_BASE_URL") or ollama_url
         self.vector_db_type = vector_db_type
         self.vector_db_url = vector_db_url
         self.vector_db_key = vector_db_key
-        self.local_vlm_enabled = local_vlm_enabled
         self._last_message_meta: Dict[str, Any] = {}
         self._last_image_payload_meta: Dict[str, Any] = {}
-        self.local_vlm_idle_timeout_seconds = max(
-            10.0,
-            _env_float("OLLAMA_VLM_IDLE_TIMEOUT_SECONDS", 45.0),
-        )
-        self.local_vlm_total_timeout_seconds = max(
-            self.local_vlm_idle_timeout_seconds,
-            _env_float("OLLAMA_VLM_TOTAL_TIMEOUT_SECONDS", 120.0),
-        )
 
         if provider == "dashscope":
             self.qwen_base_url = (
@@ -218,9 +197,6 @@ class VisionRAGPipeline:
                 or siliconflow_api_key
                 or _first_env("QWEN_VL_API_KEY", "SILICONFLOW_API_KEY")
             )
-        elif provider == "ollama":
-            self.qwen_base_url = self.ollama_url
-            self.qwen_api_key = qwen_api_key or os.getenv("QWEN_VL_API_KEY", "")
         else:
             self.qwen_base_url = qwen_base_url or os.getenv("QWEN_VL_BASE_URL", "")
             self.qwen_api_key = qwen_api_key or os.getenv("QWEN_VL_API_KEY", "")
@@ -260,7 +236,7 @@ class VisionRAGPipeline:
         logger.info(f"✓ RAG knowledge base indexed with {len(self.rag_engine.chunks)} chunks")
 
     def warm_up_retrieval(self):
-        """Load the embedding retriever before the user starts analysis."""
+        """Warm the local lexical rule retriever before the user starts analysis."""
         try:
             self.rag_engine.retrieve(
                 "FAO BIS ragi moisture foreign matter damaged grains thresholds",
@@ -330,29 +306,6 @@ class VisionRAGPipeline:
         """
         timestamp = datetime.utcnow().isoformat()
 
-        fast_proxy_result = self._maybe_return_proxy_fastpath(
-            physics_proxies=physics_proxies,
-            timestamp=timestamp,
-        )
-        if fast_proxy_result is not None:
-            logger.info("FAST PATH: proxy-only grading triggered")
-            return fast_proxy_result
-
-        if self.use_ollama and not self.local_vlm_enabled:
-            logger.info("FAST PATH: bge-m3 RAG + rule engine local grading...")
-            return self._infer_local_rules_only(
-                physics_proxies=physics_proxies,
-                timestamp=timestamp,
-            )
-
-        if self.use_ollama:
-            logger.info("FAST PATH: single-pass local grading...")
-            return self._infer_local_single_pass(
-                image_path=image_path,
-                physics_proxies=physics_proxies,
-                timestamp=timestamp,
-            )
-
         # PASS 1: Safety Gate Detection
         logger.info("PASS 1: Safety Gate Detection...")
         safety_finding = self._pass1_safety_gate(image_path)
@@ -407,589 +360,10 @@ class VisionRAGPipeline:
         """
         Async inference entrypoint for Streamlit.
 
-        Streamlit still runs the script top-to-bottom, but this keeps the slow
-        Ollama HTTP request off the blocking httpx path and lets the UI receive
-        incremental JSON chunks through stream_callback.
+        Streamlit still runs the script top-to-bottom; the cloud HTTP work is
+        moved to a worker thread so the UI wrapper can remain async-friendly.
         """
-        timestamp = datetime.utcnow().isoformat()
-
-        fast_proxy_result = self._maybe_return_proxy_fastpath(
-            physics_proxies=physics_proxies,
-            timestamp=timestamp,
-        )
-        if fast_proxy_result is not None:
-            logger.info("ASYNC FAST PATH: proxy-only grading triggered")
-            await self._emit_grading_result_update(
-                stream_callback,
-                fast_proxy_result,
-                status="proxy_fastpath",
-            )
-            return fast_proxy_result
-
-        if self.use_ollama and self.local_vlm_enabled:
-            logger.info("ASYNC PATH: streaming local Ollama grading...")
-            return await self._infer_local_single_pass_async(
-                image_path=image_path,
-                physics_proxies=physics_proxies,
-                timestamp=timestamp,
-                stream_callback=stream_callback,
-            )
-
-        # Non-Ollama paths are still synchronous in this codebase; move them to
-        # a worker thread so the async Streamlit wrapper does not block the loop.
         return await asyncio.to_thread(self.infer, image_path, physics_proxies)
-
-    def _infer_local_rules_only(
-        self,
-        physics_proxies: Dict[str, Any],
-        timestamp: str,
-    ) -> GradingResult:
-        """Fast local path: bge-m3 rule retrieval plus deterministic thresholds."""
-        rag_context = self._retrieve_rag_context(physics_proxies)
-        response_json = self._proxy_response_for_rules(physics_proxies)
-        moisture_risk, moisture_percent, is_calib = self._estimate_moisture_risk(
-            physics_proxies
-        )
-        grade = self._apply_grading_logic(
-            response_json,
-            physics_proxies,
-            moisture_risk=moisture_risk,
-            moisture_percent=moisture_percent,
-            moisture_calibrated=is_calib,
-        )
-        overall_conf = self._compute_confidence(
-            response_json,
-            physics_proxies,
-            rag_context,
-        )
-        reject_reasons = list(grade["reject_reasons"])
-        reject_recommended = bool(grade["reject"])
-        if moisture_risk == MoistureRisk.CRITICAL:
-            reject_recommended = True
-            reject_reasons.append("Critical moisture risk; dry immediately before storage")
-        elif moisture_risk == MoistureRisk.HIGH and grade["grade"] == QualityGrade.C:
-            reject_recommended = True
-            reject_reasons.append("High moisture plus low-quality evidence; hold before storage")
-
-        signal_highlights = self._summarize_signals(physics_proxies, moisture_risk)
-        operator_summary = self._build_operator_summary(
-            grade["grade"],
-            moisture_risk,
-            reject_recommended,
-            overall_conf,
-            reject_reasons,
-        )
-        manual_review_required = (
-            reject_recommended
-            or overall_conf < 65
-            or moisture_risk in {MoistureRisk.HIGH, MoistureRisk.CRITICAL}
-        )
-
-        return GradingResult(
-            quality_grade=grade["grade"],
-            quality_score=grade["score"],
-            reject_recommended=reject_recommended,
-            reject_reasons=list(dict.fromkeys(reject_reasons)),
-            broken_grain_percent=grade.get("broken_grain", 0.0),
-            foreign_matter_percent=grade.get("foreign_matter", 0.0),
-            uniformity_score=grade.get("uniformity", 70.0),
-            mold_visible=grade.get("mold_visible", False),
-            moisture_risk=moisture_risk,
-            moisture_estimate_calibrated=is_calib,
-            moisture_percent_estimate=moisture_percent,
-            overall_confidence=overall_conf,
-            pass1_confidence=overall_conf,
-            pass2_confidence=overall_conf,
-            timestamp=timestamp,
-            model_version=f"bge-m3-rules/{self.qwen_model}-fast",
-            rag_chunks_used=len(rag_context),
-            operator_summary=operator_summary,
-            manual_review_required=manual_review_required,
-            signal_highlights=signal_highlights,
-        )
-
-    def _proxy_response_for_rules(self, physics_proxies: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert measured image proxies into the rule-engine input schema."""
-        darkness = float(
-            physics_proxies.get("lab_features", {}).get("color_darkness_index", 0.0)
-        )
-        clumping = float(physics_proxies.get("clumping", {}).get("density", 0.0))
-        uniformity = float(physics_proxies.get("uniformity_score", 70.0))
-        roughness = float(physics_proxies.get("roughness_score", 50.0))
-        entropy = float(physics_proxies.get("texture_entropy", 4.0))
-        coverage = float(physics_proxies.get("grain_mask_coverage", 0.5))
-        calibrated_geometry = physics_proxies.get("calibrated_geometry", {}) or {}
-        physical = physics_proxies.get("physical_properties", {}) or {}
-        fill_ratio = float(calibrated_geometry.get("grain_fill_ratio") or coverage)
-        clump_equiv_diameter_mm = float(calibrated_geometry.get("clump_equiv_diameter_mm") or 0.0)
-        median_equiv_diameter_mm = float(calibrated_geometry.get("median_equiv_diameter_mm") or 0.0)
-        size_cv = float(physical.get("size_cv_percent") or 0.0)
-        median_aspect = float(physical.get("median_aspect_ratio") or 1.0)
-        median_roundness = float(physical.get("median_roundness") or 0.7)
-        dark_fraction = float(physical.get("dark_fraction") or 0.0)
-        reflectiveness_class = str(physical.get("reflectiveness_class") or "unknown")
-        size_class = str(physical.get("size_class") or "unknown")
-        shape_class = str(physical.get("shape_class") or "unknown")
-
-        off_tone = float(
-            np.clip(
-                (100.0 - uniformity) * 0.35
-                + max(0.0, darkness - 45.0) * 0.18
-                + dark_fraction * 6.0,
-                2.0,
-                22.0,
-            )
-        )
-        size_dev = float(
-            np.clip(
-                (100.0 - uniformity) * 0.22
-                + max(0.0, 35.0 - roughness) * 0.10
-                + max(0.0, 0.58 - fill_ratio) * 18.0
-                + max(0.0, clump_equiv_diameter_mm - 2.2) * 1.2
-                + max(0.0, size_cv - 32.0) * 0.11,
-                2.0,
-                18.0,
-            )
-        )
-        shape_defect = float(
-            np.clip(
-                clumping * 45.0
-                + max(0.0, 3.0 - entropy) * 1.8
-                + max(0.0, clump_equiv_diameter_mm - 2.1) * 1.8
-                + max(0.0, median_aspect - 1.65) * 3.0
-                + max(0.0, 0.52 - median_roundness) * 8.0,
-                1.0,
-                18.0,
-            )
-        )
-        broken = float(np.clip((100.0 - uniformity) * 0.08 + max(0.0, 25.0 - roughness) * 0.05, 0.5, 8.0))
-        foreign = float(np.clip(0.05 + max(0.0, 0.18 - coverage) * 5.0, 0.05, 1.4))
-        bimodal = bool(
-            uniformity < 62.0
-            or (darkness > 52.0 and entropy < 3.0)
-            or (median_equiv_diameter_mm > 0.0 and clump_equiv_diameter_mm > median_equiv_diameter_mm * 1.8)
-            or size_class == "mixed"
-        )
-
-        grade = "B"
-        if (
-            off_tone < 5.0
-            and size_dev < 5.0
-            and shape_defect < 5.0
-            and foreign <= 0.10
-            and clumping < 0.12
-            and darkness < 45.0
-            and uniformity >= 72.0
-        ):
-            grade = "A"
-        elif (
-            off_tone > 10.0
-            or size_dev > 15.0
-            or shape_defect > 10.0
-            or broken > 5.0
-            or foreign > 0.75
-            or bimodal
-            or clumping > 0.18
-            or darkness > 50.0
-            or uniformity < 68.0
-        ):
-            grade = "C"
-
-        defects: List[str] = []
-        if bimodal:
-            defects.append("bimodal color")
-        if clumping > 0.18:
-            defects.append("moisture clumping")
-        if darkness > 50.0:
-            defects.append("dark/dull grains")
-        if uniformity < 68.0:
-            defects.append("weak uniformity")
-        if size_class in {"small", "large", "mixed"}:
-            defects.append(f"{size_class} grain size")
-        if shape_class in {"elongated_or_broken", "slightly_irregular"}:
-            defects.append(shape_class.replace("_", " "))
-        if reflectiveness_class == "dull" and dark_fraction > 0.28:
-            defects.append("dull low-reflectance grains")
-
-        return {
-            "quality_grade": grade,
-            "quality_score": 90 if grade == "A" else 55 if grade == "C" else 75,
-            "off_tone_fraction": off_tone,
-            "size_deviation": size_dev,
-            "shape_defect_fraction": shape_defect,
-            "broken_grain_percent": broken,
-            "foreign_matter_percent": foreign,
-            "other_edible_grains_percent": 0.0,
-            "bimodal_color_detected": bimodal,
-            "mold_visible": False,
-            "visible_defects": defects,
-            "model_confidence": 84 if grade in {"A", "C"} else 74,
-            "brief_reason": "Fast local decision from physics proxies, bge-m3 rule retrieval, and deterministic thresholds.",
-        }
-
-    def _infer_local_single_pass(
-        self,
-        image_path: str,
-        physics_proxies: Dict[str, Any],
-        timestamp: str,
-    ) -> GradingResult:
-        """Single-call local inference for Ollama to keep UI latency acceptable."""
-        try:
-            rag_context = self._retrieve_rag_context(physics_proxies)
-            feedback_context = self._retrieve_feedback_context(physics_proxies)
-            grading_prompt = self._build_fast_local_prompt(
-                physics_proxies=physics_proxies,
-                rag_context=rag_context,
-                feedback_context=feedback_context,
-            )
-
-            response = self._call_qwen_vision(
-                image_path,
-                grading_prompt,
-                max_tokens=300,
-                physics_proxies=physics_proxies,
-            )
-            response_json = self._parse_json_response(response)
-            if not response_json:
-                repair_source = (
-                    str(self._last_message_meta.get("content") or "").strip()
-                    or str(self._last_message_meta.get("reasoning") or "").strip()
-                    or str(response).strip()
-                )
-                response_json = self._extract_grading_hints_from_text(
-                    repair_source, physics_proxies
-                )
-
-            moisture_risk, moisture_percent, is_calib = self._estimate_moisture_risk(
-                physics_proxies
-            )
-            grade = self._apply_grading_logic(
-                response_json,
-                physics_proxies,
-                moisture_risk=moisture_risk,
-                moisture_percent=moisture_percent,
-                moisture_calibrated=is_calib,
-            )
-            overall_conf = self._compute_confidence(
-                response_json, physics_proxies, rag_context
-            )
-            reject_reasons = list(grade["reject_reasons"])
-            reject_recommended = bool(grade["reject"])
-            if moisture_risk == MoistureRisk.CRITICAL:
-                reject_recommended = True
-                reject_reasons.append("Critical moisture risk; dry immediately before storage")
-            elif moisture_risk == MoistureRisk.HIGH and grade["grade"] == QualityGrade.C:
-                reject_recommended = True
-                reject_reasons.append("High moisture plus low-quality evidence; hold before storage")
-
-            pass_conf = min(100, int(response_json.get("model_confidence", overall_conf)))
-            signal_highlights = self._summarize_signals(physics_proxies, moisture_risk)
-            operator_summary = self._build_operator_summary(
-                grade["grade"],
-                moisture_risk,
-                reject_recommended,
-                overall_conf,
-                reject_reasons,
-            )
-            manual_review_required = (
-                reject_recommended
-                or overall_conf < 65
-                or moisture_risk in {MoistureRisk.HIGH, MoistureRisk.CRITICAL}
-            )
-
-            grading_result = GradingResult(
-                quality_grade=grade["grade"],
-                quality_score=grade["score"],
-                reject_recommended=reject_recommended,
-                reject_reasons=list(dict.fromkeys(reject_reasons)),
-                broken_grain_percent=grade.get("broken_grain", 0.0),
-                foreign_matter_percent=grade.get("foreign_matter", 0.0),
-                uniformity_score=grade.get("uniformity", 70.0),
-                mold_visible=grade.get("mold_visible", False),
-                moisture_risk=moisture_risk,
-                moisture_estimate_calibrated=is_calib,
-                moisture_percent_estimate=moisture_percent,
-                overall_confidence=overall_conf,
-                pass1_confidence=pass_conf,
-                pass2_confidence=pass_conf,
-                timestamp=timestamp,
-                model_version=f"ollama/{self.qwen_model}-singlepass",
-                rag_chunks_used=len(rag_context),
-                operator_summary=operator_summary,
-                manual_review_required=manual_review_required,
-                signal_highlights=signal_highlights,
-            )
-        except Exception as e:
-            logger.error(f"Single-pass local grading failed: {e}")
-            logger.info("Falling back to deterministic local rules after VLM failure")
-            try:
-                rules_result = self._infer_local_rules_only(
-                    physics_proxies=physics_proxies,
-                    timestamp=timestamp,
-                )
-                rules_result.model_version = f"bge-m3-rules/{self.qwen_model}-vl-unavailable"
-                rules_result.signal_highlights = list(
-                    dict.fromkeys(
-                        [
-                            "Local Qwen3-VL unavailable; deterministic proxy/rule path used",
-                            *rules_result.signal_highlights,
-                        ]
-                    )
-                )
-                return rules_result
-            except Exception as rules_error:
-                logger.error(f"Deterministic local fallback failed: {rules_error}")
-                return self._fallback_grading(physics_proxies, timestamp)
-
-    async def _infer_local_single_pass_async(
-        self,
-        image_path: str,
-        physics_proxies: Dict[str, Any],
-        timestamp: str,
-        stream_callback: Optional[Callable[[str], Any]] = None,
-    ) -> GradingResult:
-        """Single-call local inference using async streaming Ollama /api/generate."""
-        try:
-            # RAG retrieval and feedback lookup are local CPU/disk operations.
-            # Keep them out of the event loop before starting the streamed HTTP
-            # phase so Streamlit can still push progress deltas promptly.
-            rag_context, feedback_context = await asyncio.gather(
-                asyncio.to_thread(self._retrieve_rag_context, physics_proxies),
-                asyncio.to_thread(self._retrieve_feedback_context, physics_proxies),
-            )
-            grading_prompt = self._build_fast_local_prompt(
-                physics_proxies=physics_proxies,
-                rag_context=rag_context,
-                feedback_context=feedback_context,
-            )
-
-            response = await self._call_qwen_vision_stream_async(
-                image_path,
-                grading_prompt,
-                max_tokens=300,
-                physics_proxies=physics_proxies,
-                stream_callback=stream_callback,
-            )
-            response_json = self._parse_json_response(response)
-            if not response_json:
-                repair_source = (
-                    str(self._last_message_meta.get("content") or "").strip()
-                    or str(self._last_message_meta.get("reasoning") or "").strip()
-                    or str(response).strip()
-                )
-                response_json = self._extract_grading_hints_from_text(
-                    repair_source,
-                    physics_proxies,
-                )
-
-            moisture_risk, moisture_percent, is_calib = self._estimate_moisture_risk(
-                physics_proxies
-            )
-            grade = self._apply_grading_logic(
-                response_json,
-                physics_proxies,
-                moisture_risk=moisture_risk,
-                moisture_percent=moisture_percent,
-                moisture_calibrated=is_calib,
-            )
-            overall_conf = self._compute_confidence(
-                response_json,
-                physics_proxies,
-                rag_context,
-            )
-            reject_reasons = list(grade["reject_reasons"])
-            reject_recommended = bool(grade["reject"])
-            if moisture_risk == MoistureRisk.CRITICAL:
-                reject_recommended = True
-                reject_reasons.append("Critical moisture risk; dry immediately before storage")
-            elif moisture_risk == MoistureRisk.HIGH and grade["grade"] == QualityGrade.C:
-                reject_recommended = True
-                reject_reasons.append("High moisture plus low-quality evidence; hold before storage")
-
-            pass_conf = min(100, int(response_json.get("model_confidence", overall_conf)))
-            signal_highlights = self._summarize_signals(physics_proxies, moisture_risk)
-            operator_summary = self._build_operator_summary(
-                grade["grade"],
-                moisture_risk,
-                reject_recommended,
-                overall_conf,
-                reject_reasons,
-            )
-            manual_review_required = (
-                reject_recommended
-                or overall_conf < 65
-                or moisture_risk in {MoistureRisk.HIGH, MoistureRisk.CRITICAL}
-            )
-
-            return GradingResult(
-                quality_grade=grade["grade"],
-                quality_score=grade["score"],
-                reject_recommended=reject_recommended,
-                reject_reasons=list(dict.fromkeys(reject_reasons)),
-                broken_grain_percent=grade.get("broken_grain", 0.0),
-                foreign_matter_percent=grade.get("foreign_matter", 0.0),
-                uniformity_score=grade.get("uniformity", 70.0),
-                mold_visible=grade.get("mold_visible", False),
-                moisture_risk=moisture_risk,
-                moisture_estimate_calibrated=is_calib,
-                moisture_percent_estimate=moisture_percent,
-                overall_confidence=overall_conf,
-                pass1_confidence=pass_conf,
-                pass2_confidence=pass_conf,
-                timestamp=timestamp,
-                model_version=f"ollama/{self.qwen_model}-async-stream",
-                rag_chunks_used=len(rag_context),
-                operator_summary=operator_summary,
-                manual_review_required=manual_review_required,
-                signal_highlights=signal_highlights,
-            )
-            await self._emit_grading_result_update(
-                stream_callback,
-                grading_result,
-                status="completed",
-            )
-            return grading_result
-        except Exception as e:
-            logger.error(f"Async single-pass local grading failed: {e}")
-            if stream_callback is not None:
-                await self._emit_stream_update(
-                    stream_callback,
-                    json.dumps(
-                        {
-                            "status": "vlm_unavailable",
-                            "detail": str(e),
-                            "fallback": "deterministic_proxy_rules",
-                        },
-                        indent=2,
-                    ),
-                )
-            logger.info("Falling back to deterministic local rules after async VLM failure")
-            try:
-                rules_result = await asyncio.to_thread(
-                    self._infer_local_rules_only,
-                    physics_proxies,
-                    timestamp,
-                )
-                rules_result.model_version = f"bge-m3-rules/{self.qwen_model}-async-vl-unavailable"
-                rules_result.signal_highlights = list(
-                    dict.fromkeys(
-                        [
-                            "Local Qwen3-VL unavailable; deterministic proxy/rule path used",
-                            *rules_result.signal_highlights,
-                        ]
-                    )
-                )
-                await self._emit_grading_result_update(
-                    stream_callback,
-                    rules_result,
-                    status="fallback_completed",
-                    detail="Local Qwen3-VL timed out or failed; deterministic proxy/rule path completed.",
-                )
-                return rules_result
-            except Exception as rules_error:
-                logger.error(f"Deterministic async fallback failed: {rules_error}")
-                fallback_result = self._fallback_grading(physics_proxies, timestamp)
-                await self._emit_grading_result_update(
-                    stream_callback,
-                    fallback_result,
-                    status="fallback_completed",
-                    detail="Deterministic emergency fallback completed.",
-                )
-                return fallback_result
-
-    def _maybe_return_proxy_fastpath(
-        self,
-        physics_proxies: Dict[str, Any],
-        timestamp: str,
-    ) -> Optional[GradingResult]:
-        """Skip the VLM when proxy evidence already shows an obviously bad storage lot."""
-        darkness = float(
-            physics_proxies.get("lab_features", {}).get("color_darkness_index", 0.0)
-        )
-        clumping = float(physics_proxies.get("clumping", {}).get("density", 0.0))
-        uniformity = float(physics_proxies.get("uniformity_score", 70.0))
-        entropy = float(physics_proxies.get("texture_entropy", 10.0))
-        coverage = float(physics_proxies.get("grain_mask_coverage", 0.5))
-        moisture_risk, moisture_percent, is_calib = self._estimate_moisture_risk(
-            physics_proxies
-        )
-
-        strong_moisture_flags = sum(
-            [
-                darkness >= 66,
-                clumping >= 0.20,
-                uniformity <= 42,
-                entropy <= 2.2,
-            ]
-        )
-        moderate_moisture_flags = sum(
-            [
-                darkness >= 62,
-                clumping >= 0.16,
-                uniformity <= 50,
-                entropy <= 2.8,
-            ]
-        )
-        obvious_risk = (
-            strong_moisture_flags >= 2
-            or (moderate_moisture_flags >= 3 and clumping >= 0.16)
-            or (
-                moisture_risk == MoistureRisk.CRITICAL
-                and darkness >= 60
-                and uniformity <= 50
-                and entropy <= 2.9
-            )
-            or (
-                moisture_risk == MoistureRisk.CRITICAL
-                and darkness >= 52
-                and entropy <= 1.6
-            )
-            or (
-                moisture_risk == MoistureRisk.CRITICAL
-                and darkness >= 54
-                and clumping >= 0.14
-            )
-        )
-        if not obvious_risk:
-            return None
-        reject_reasons = self._build_proxy_fastpath_reasons(
-            physics_proxies=physics_proxies,
-            moisture_risk=moisture_risk,
-        )
-        proxy_score = self._score_proxy_fastpath(
-            physics_proxies=physics_proxies,
-            moisture_risk=moisture_risk,
-        )
-        signal_highlights = self._summarize_signals(physics_proxies, moisture_risk)
-        operator_summary = self._build_operator_summary(
-            QualityGrade.C,
-            moisture_risk,
-            True,
-            82,
-            reject_reasons,
-        )
-        return GradingResult(
-            quality_grade=QualityGrade.C,
-            quality_score=proxy_score,
-            reject_recommended=True,
-            reject_reasons=reject_reasons,
-            broken_grain_percent=float(np.clip((100.0 - uniformity) * 0.10, 1.5, 8.5)),
-            foreign_matter_percent=float(np.clip(0.6 + max(0.0, 0.10 - coverage) * 12.0, 0.6, 2.0)),
-            uniformity_score=min(uniformity, 52.0),
-            mold_visible=False,
-            moisture_risk=moisture_risk,
-            moisture_estimate_calibrated=is_calib,
-            moisture_percent_estimate=moisture_percent,
-            overall_confidence=82,
-            pass1_confidence=82,
-            pass2_confidence=82,
-            timestamp=timestamp,
-            model_version=f"ollama/{self.qwen_model}-proxyfast",
-            rag_chunks_used=0,
-            operator_summary=operator_summary,
-            manual_review_required=True,
-            signal_highlights=signal_highlights,
-        )
 
     def _pass1_safety_gate(self, image_path: str) -> SafetyGateFinding:
         """
@@ -1181,13 +555,13 @@ Respond in JSON format:
     def _retrieve_rag_context(self, physics_proxies: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Retrieve authoritative chunks relevant to the sample's proxy profile."""
         query = self._build_rag_query(physics_proxies)
-        return self.rag_engine.retrieve(query, k=2 if self.use_ollama else 4)
+        return self.rag_engine.retrieve(query, k=4)
 
     def _retrieve_feedback_context(self, physics_proxies: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Fetch similar human corrections so feedback helps before the next retrain."""
         return self.feedback_collector.retrieve_similar_feedback(
             physics_proxies,
-            limit=1 if self.use_ollama else 3,
+            limit=3,
         )
 
     def _build_grading_prompt(
@@ -1243,59 +617,6 @@ JSON schema:
 
         return prompt
 
-    def _build_fast_local_prompt(
-        self,
-        physics_proxies: Dict[str, Any],
-        rag_context: List[Dict[str, Any]],
-        feedback_context: List[Dict[str, Any]],
-    ) -> str:
-        """Very compact prompt for local Ollama to keep latency low."""
-        context_str = self._compress_rag_context(rag_context, max_chars=180)
-        calibration = physics_proxies.get("calibration", {}) or {}
-        physical = physics_proxies.get("physical_properties", {}) or {}
-        geometry = physics_proxies.get("calibrated_geometry", {}) or {}
-        correction = ""
-        if feedback_context:
-            item = feedback_context[0]
-            correction = (
-                f"\nRecent correction: model {item['predicted_grade']} -> human {item['true_grade']} "
-                f"for a sample with moisture {item['true_moisture_risk']}."
-            )
-        return f"""/no_think
-Return only JSON. Inspect the ragi image crop and measured signals.
-Backend rules apply final thresholds, so estimate only visible defects.
-A only if clean, uniform, dry-looking. C for mold, insects, stones, heavy foreign matter, mixed tones, damaged/shrivelled grain, or moisture-heavy appearance.
-
-Signals:
-darkness={physics_proxies['lab_features']['color_darkness_index']:.1f}
-clumping={physics_proxies['clumping']['density']:.3f}
-uniformity={physics_proxies['uniformity_score']:.1f}
-entropy={physics_proxies['texture_entropy']:.2f}
-roughness={physics_proxies['roughness_score']:.1f}
-coverage={physics_proxies['grain_mask_coverage']:.2%}
-calibration={calibration.get('source', 'none')} px_per_mm={float(calibration.get('pixels_per_mm') or 0.0):.2f}
-grain_size={physical.get('size_class', 'unknown')} median_mm={float(physical.get('median_diameter_mm') or 0.0):.2f} p90_mm={float(physical.get('p90_diameter_mm') or 0.0):.2f}
-shape={physical.get('shape_class', 'unknown')} aspect={float(physical.get('median_aspect_ratio') or 0.0):.2f} roundness={float(physical.get('median_roundness') or 0.0):.2f}
-reflectiveness={physical.get('reflectiveness_class', 'unknown')} shine={float(physical.get('reflectiveness_index') or 0.0):.1f} dark_fraction={float(physical.get('dark_fraction') or 0.0):.2f}
-grain_fill={float(geometry.get('grain_fill_ratio') or 0.0):.2f} clump_mm={float(geometry.get('clump_equiv_diameter_mm') or 0.0):.2f}
-rules={context_str}{correction}
-
-JSON:
-{{
- "quality_grade":"A|B|C",
- "off_tone_fraction":0,
- "size_deviation":0,
- "shape_defect_fraction":0,
- "broken_grain_percent":0,
- "foreign_matter_percent":0,
- "other_edible_grains_percent":0,
- "bimodal_color_detected":false,
- "mold_visible":false,
- "visible_defects":[""],
- "model_confidence":0,
- "brief_reason":""
-}}"""
-
     def _feedback_examples_to_text(self, feedback_context: List[Dict[str, Any]]) -> str:
         if not feedback_context:
             return "- No similar corrected samples are available yet."
@@ -1318,7 +639,7 @@ JSON:
         return "\n".join(lines)
 
     def _compress_rag_context(self, rag_context: List[Dict[str, Any]], max_chars: int = 900) -> str:
-        """Condense retrieved rules so local VLM output budget is spent on JSON, not long reasoning."""
+        """Condense retrieved rules so cloud model output budget is spent on JSON."""
         if not rag_context:
             return "- No retrieved rules available."
 
@@ -1340,12 +661,8 @@ JSON:
     def _call_text_model(self, prompt: str, max_tokens: int = 180) -> str:
         """Run a compact text-only repair pass against the same model endpoint."""
         try:
-            if self.use_ollama:
-                endpoint = f"{self.ollama_url}/chat/completions"
-                headers = {"Content-Type": "application/json"}
-            else:
-                endpoint = self._chat_completions_endpoint()
-                headers = self._cloud_headers()
+            endpoint = self._chat_completions_endpoint()
+            headers = self._cloud_headers()
 
             payload = {
                 "model": self.qwen_model,
@@ -1356,10 +673,7 @@ JSON:
                 "max_tokens": max_tokens,
                 "temperature": 0.1,
             }
-            if self.use_ollama:
-                payload["response_format"] = {"type": "json_object"}
-            else:
-                payload = self._openai_payload_options(payload)
+            payload = self._openai_payload_options(payload)
 
             with httpx.Client(timeout=self.qwen_timeout_seconds) as client:
                 response = client.post(endpoint, headers=headers, json=payload)
@@ -1458,121 +772,6 @@ JSON:
             payload["detail"] = detail
         await self._emit_stream_update(stream_callback, json.dumps(payload, indent=2))
 
-    async def _call_qwen_vision_stream_async(
-        self,
-        image_path: str,
-        prompt: str,
-        max_tokens: int = 500,
-        physics_proxies: Optional[Dict[str, Any]] = None,
-        stream_callback: Optional[Callable[[str], Any]] = None,
-    ) -> str:
-        """
-        Async streaming Qwen3-VL call through Ollama /api/generate.
-
-        Ollama emits newline-delimited JSON chunks. Each chunk contains a
-        response fragment, so we append fragments into a growing buffer and let
-        Streamlit render that buffer in real time through stream_callback.
-        """
-        if not self.use_ollama:
-            return await asyncio.to_thread(
-                self._call_qwen_vision,
-                image_path,
-                prompt,
-                max_tokens,
-                physics_proxies,
-            )
-
-        image_data, _image_type = await asyncio.to_thread(
-            self._prepare_image_payload,
-            image_path,
-            physics_proxies,
-        )
-
-        native_base = self.ollama_url.rstrip("/")
-        if native_base.endswith("/v1"):
-            native_base = native_base[:-3]
-        endpoint = f"{native_base}/api/generate"
-        full_prompt = (
-            "/no_think Return only strict JSON. No markdown, prose, or reasoning.\n\n"
-            f"{prompt}"
-        )
-        payload = {
-            "model": self.qwen_model,
-            "prompt": full_prompt,
-            "images": [image_data],
-            "stream": True,
-            "think": False,
-            "options": {
-                "temperature": 0.1,
-                "top_p": 0.8,
-                "seed": 7,
-                "num_predict": max_tokens,
-                # Keep the local vision call lean on RTX 3050-class systems.
-                "num_ctx": 1024,
-            },
-        }
-
-        fragments: List[str] = []
-        last_chunk: Dict[str, Any] = {}
-        timeout = httpx.Timeout(
-            connect=10.0,
-            read=self.local_vlm_idle_timeout_seconds,
-            write=60.0,
-            pool=10.0,
-        )
-
-        try:
-            async with asyncio.timeout(self.local_vlm_total_timeout_seconds):
-                async with httpx.AsyncClient(timeout=timeout) as client:
-                    async with client.stream("POST", endpoint, json=payload) as response:
-                        if response.status_code >= 400:
-                            body = (await response.aread()).decode("utf-8", errors="replace")
-                            raise httpx.HTTPStatusError(
-                                f"Ollama streaming request failed: HTTP {response.status_code} {body}",
-                                request=response.request,
-                                response=response,
-                            )
-
-                        async for line in response.aiter_lines():
-                            if not line:
-                                continue
-                            try:
-                                chunk = json.loads(line)
-                            except json.JSONDecodeError:
-                                logger.debug("Skipping non-JSON Ollama stream line: %s", line[:120])
-                                continue
-
-                            last_chunk = chunk
-                            token = chunk.get("response", "")
-                            if token:
-                                fragments.append(str(token))
-                                if stream_callback is not None:
-                                    await self._emit_stream_update(stream_callback, "".join(fragments))
-
-                            if chunk.get("done"):
-                                break
-        except (TimeoutError, httpx.TimeoutException) as exc:
-            partial = "".join(fragments).strip()
-            self._last_message_meta = {
-                "content": partial,
-                "reasoning": "",
-                "finish_reason": "timeout",
-            }
-            raise TimeoutError(
-                "Ollama vision stream timed out after "
-                f"{self.local_vlm_total_timeout_seconds:.0f}s total or "
-                f"{self.local_vlm_idle_timeout_seconds:.0f}s idle"
-            ) from exc
-
-        content = "".join(fragments).strip()
-        self._last_message_meta = {
-            "content": content,
-            "reasoning": "",
-            "finish_reason": str(last_chunk.get("done_reason", "")),
-        }
-        logger.info("✓ Async streaming inference succeeded (Ollama /api/generate)")
-        return content
-
     def _call_qwen_vision(
         self,
         image_path: str,
@@ -1581,54 +780,13 @@ JSON:
         physics_proxies: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
-        Call Qwen-VL through the configured local or OpenAI-compatible provider.
+        Call Qwen-VL through the configured cloud OpenAI-compatible provider.
         """
         try:
             image_data, image_type = self._prepare_image_payload(
                 image_path,
                 physics_proxies=physics_proxies,
             )
-
-            if self.use_ollama:
-                native_base = self.ollama_url.rstrip("/")
-                if native_base.endswith("/v1"):
-                    native_base = native_base[:-3]
-                endpoint = f"{native_base}/api/chat"
-                payload = {
-                    "model": self.qwen_model,
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "/no_think Return only strict JSON. No reasoning.",
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt,
-                            "images": [image_data],
-                        },
-                    ],
-                    "stream": False,
-                    "think": False,
-                    "options": {
-                        "temperature": 0.1,
-                        "top_p": 0.8,
-                        "seed": 7,
-                        "num_predict": max_tokens,
-                    },
-                }
-                with httpx.Client(timeout=90) as client:
-                    response = client.post(endpoint, json=payload)
-                    response.raise_for_status()
-
-                message = response.json().get("message", {})
-                content = message.get("content", "")
-                self._last_message_meta = {
-                    "content": content,
-                    "reasoning": message.get("thinking", "") or message.get("reasoning", ""),
-                    "finish_reason": response.json().get("done_reason", ""),
-                }
-                logger.info("✓ Inference succeeded (Ollama native)")
-                return str(content or message.get("thinking", "") or message.get("reasoning", "")).strip()
 
             # Prepare API request
             endpoint = self._chat_completions_endpoint()
@@ -1746,20 +904,12 @@ Notes:
         raw_text: str,
         physics_proxies: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Heuristic backup when Ollama returns reasoning text without final JSON."""
+        """Heuristic backup when the cloud model returns reasoning text without final JSON."""
         text = str(raw_text or "").lower()
         if not text:
             return {}
         if not any(ch.isalpha() for ch in text):
-            response_json = self._proxy_response_for_rules(physics_proxies)
-            response_json["brief_reason"] = (
-                "Recovered from incomplete model output using deterministic proxy/rule signals."
-            )
-            response_json["model_confidence"] = min(
-                float(response_json.get("model_confidence", 70)),
-                70.0,
-            )
-            return response_json
+            return {}
 
         grade = "B"
         if "grade c" in text or "→ grade c" in text or "grade=c" in text:

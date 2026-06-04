@@ -1,6 +1,6 @@
 # FAO and BIS-Aligned Ragi Rule Anchors
 
-This file is the authoritative rule anchor used by the local embedding RAG layer.
+This file is the authoritative rule anchor used by the local lexical RAG layer.
 It combines FAO grain-quality guidance with public Indian ragi market and
 procurement thresholds that reference BIS-style foodgrain analysis terminology
 and sampling methods.

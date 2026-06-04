@@ -2,18 +2,15 @@
 RAG engine for ragi grading knowledge retrieval.
 
 This version indexes the authoritative root Markdown specs, chunks them
-carefully, and retrieves with bge-m3 embeddings when available. A weighted
-lexical scorer remains as a local fallback so the app still runs without a
-downloaded embedding model.
+carefully, and retrieves with a weighted lexical scorer. It deliberately avoids
+local embedding models so production inference stays cloud-Qwen only.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import math
-import os
 import re
 import sys
 from pathlib import Path
@@ -22,17 +19,11 @@ from typing import Any, Dict, Iterable, List, Optional
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
-os.environ.setdefault("USE_TF", "0")
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-
 TOKEN_RE = re.compile(r"[a-z0-9]+")
 HEADING_RE = re.compile(r"^(#{1,3})\s+(.+?)\s*$")
 MAX_CHARS_PER_CHUNK = 1200
 OVERLAP_CHARS = 180
 INDEX_VERSION = 2
-EMBEDDING_INDEX_VERSION = 1
-EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
 DEFAULT_INDEX_PATH = Path(__file__).resolve().parents[2] / "data" / "rag" / "rag_index.json"
 DEFAULT_DOCS_DIR = Path(__file__).resolve().parents[2] / "docs" / "rag"
 
@@ -46,30 +37,19 @@ class RAGEngine:
         self,
         index_path: str | Path = DEFAULT_INDEX_PATH,
         retrieval_mode: str = "lexical",
-        embedding_model_name: str = EMBEDDING_MODEL_NAME,
-        embedding_index_path: Optional[str] = None,
     ):
         self.index_path = Path(index_path)
         self.repo_root = Path(__file__).resolve().parents[2]
         self.docs_dir = DEFAULT_DOCS_DIR
-        self.retrieval_mode = retrieval_mode.lower().strip()
-        self.embedding_model_name = embedding_model_name
-        self.embedding_index_path = (
-            Path(embedding_index_path)
-            if embedding_index_path
-            else self.index_path.with_suffix(".embeddings.npz")
-        )
+        self.retrieval_mode = "lexical"
+        if retrieval_mode.lower().strip() != "lexical":
+            logger.warning("Only lexical RAG is supported in the cloud-only build.")
         self.chunks: List[Dict[str, Any]] = []
         self._search_docs: Optional[List[Dict[str, Any]]] = None
-        self._embedding_model: Any = None
-        self._embedding_matrix: Any = None
-        self._embedding_fingerprint: Optional[str] = None
         self.load_index()
 
     def _invalidate_cache(self):
         self._search_docs = None
-        self._embedding_matrix = None
-        self._embedding_fingerprint = None
 
     def load_index(self):
         """Load an existing chunk index from disk."""
@@ -333,120 +313,6 @@ class RAGEngine:
             self._search_docs = self._build_search_docs()
         return self._search_docs
 
-    def _embedding_text(self, chunk: Dict[str, Any]) -> str:
-        tags = ", ".join(chunk.get("tags", []))
-        return (
-            f"passage: {chunk.get('title', '')}\n"
-            f"source: {chunk.get('source', '')}\n"
-            f"tags: {tags}\n"
-            f"{chunk.get('content', '')}"
-        )
-
-    def _chunk_fingerprint(self) -> str:
-        payload = [
-            {
-                "id": chunk.get("id", ""),
-                "source": chunk.get("source", ""),
-                "title": chunk.get("title", ""),
-                "content": chunk.get("content", ""),
-                "index_version": chunk.get("index_version", 0),
-            }
-            for chunk in self.chunks
-        ]
-        encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
-        return hashlib.sha256(encoded).hexdigest()
-
-    def _load_embedding_model(self):
-        if self._embedding_model is None:
-            cache_root = self.repo_root / ".hf-cache"
-            os.environ.setdefault("HF_HOME", str(cache_root))
-            from sentence_transformers import SentenceTransformer
-
-            logger.info("Loading embedding model %s", self.embedding_model_name)
-            self._embedding_model = SentenceTransformer(
-                self.embedding_model_name,
-                cache_folder=str(cache_root / "hub"),
-                local_files_only=True,
-            )
-        return self._embedding_model
-
-    def _encode_texts(self, texts: List[str]):
-        model = self._load_embedding_model()
-        return model.encode(
-            texts,
-            batch_size=8,
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-            show_progress_bar=False,
-        )
-
-    def _load_embedding_index(self, fingerprint: str) -> bool:
-        if not self.embedding_index_path.exists():
-            return False
-        try:
-            import numpy as np
-
-            payload = np.load(self.embedding_index_path, allow_pickle=False)
-            stored_version = int(payload["version"][0])
-            stored_fingerprint = str(payload["fingerprint"][0])
-            embeddings = payload["embeddings"].astype("float32")
-            if (
-                stored_version != EMBEDDING_INDEX_VERSION
-                or stored_fingerprint != fingerprint
-                or embeddings.shape[0] != len(self.chunks)
-            ):
-                return False
-            self._embedding_matrix = embeddings
-            self._embedding_fingerprint = fingerprint
-            logger.info("✓ Loaded bge-m3 embeddings from %s", self.embedding_index_path)
-            return True
-        except Exception as e:
-            logger.warning("Could not load embedding index: %s", e)
-            return False
-
-    def _save_embedding_index(self, fingerprint: str):
-        try:
-            import numpy as np
-
-            np.savez_compressed(
-                self.embedding_index_path,
-                version=np.array([EMBEDDING_INDEX_VERSION]),
-                fingerprint=np.array([fingerprint]),
-                model=np.array([self.embedding_model_name]),
-                embeddings=self._embedding_matrix,
-            )
-            logger.info("✓ Saved bge-m3 embeddings to %s", self.embedding_index_path)
-        except Exception as e:
-            logger.warning("Could not save embedding index: %s", e)
-
-    def _ensure_embedding_index(self) -> bool:
-        if not self.chunks:
-            return False
-
-        fingerprint = self._chunk_fingerprint()
-        if self._embedding_matrix is not None and self._embedding_fingerprint == fingerprint:
-            return True
-        if self._load_embedding_index(fingerprint):
-            return True
-
-        try:
-            import numpy as np
-
-            texts = [self._embedding_text(chunk) for chunk in self.chunks]
-            matrix = self._encode_texts(texts)
-            self._embedding_matrix = np.asarray(matrix, dtype="float32")
-            self._embedding_fingerprint = fingerprint
-            self._save_embedding_index(fingerprint)
-            return True
-        except Exception as e:
-            logger.warning(
-                "bge-m3 embedding retrieval unavailable; falling back to lexical RAG: %s",
-                e,
-            )
-            self._embedding_matrix = None
-            self._embedding_fingerprint = None
-            return False
-
     def _select_scored_chunks(
         self,
         scored: List[tuple[Dict[str, Any], float]],
@@ -470,8 +336,6 @@ class RAGEngine:
             item = dict(chunk)
             item["retrieval_score"] = round(float(score), 4)
             item["retrieval_method"] = retrieval_method
-            if retrieval_method == "bge-m3":
-                item["embedding_model"] = self.embedding_model_name
             selected.append(item)
             seen_titles.add(title_key)
             per_source_counts[source] = per_source_counts.get(source, 0) + 1
@@ -480,27 +344,6 @@ class RAGEngine:
                 break
 
         return selected
-
-    def _retrieve_embedding(self, query: str, k: int) -> List[Dict[str, Any]]:
-        if not self._ensure_embedding_index():
-            return []
-        try:
-            import numpy as np
-
-            query_vec = np.asarray(
-                self._encode_texts([f"query: {query}"])[0],
-                dtype="float32",
-            )
-            scores = self._embedding_matrix @ query_vec
-            scored: List[tuple[Dict[str, Any], float]] = []
-            for chunk, cosine in zip(self.chunks, scores):
-                priority = float(chunk.get("source_priority", 1.0))
-                score = (float(cosine) * 10.0) + (0.20 * priority)
-                scored.append((chunk, score))
-            return self._select_scored_chunks(scored, k, "bge-m3")
-        except Exception as e:
-            logger.warning("Embedding retrieval failed; using lexical RAG: %s", e)
-            return []
 
     def _query_intent_boost(
         self,
@@ -547,11 +390,7 @@ class RAGEngine:
         return score
 
     def retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
-        """Retrieve top-k chunks, preferring bge-m3 embeddings when configured."""
-        if self.retrieval_mode in {"embedding", "hybrid"}:
-            embedded = self._retrieve_embedding(query, k)
-            if embedded:
-                return embedded
+        """Retrieve top-k chunks using lexical scoring."""
         return self._retrieve_lexical(query, k)
 
     def _retrieve_lexical(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
@@ -647,7 +486,7 @@ class RAGEngine:
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    engine = RAGEngine(retrieval_mode="embedding")
+    engine = RAGEngine(retrieval_mode="lexical")
     engine.index_documents()
     results = engine.retrieve("What are the Grade A criteria and failure modes?", k=5)
     print(engine.format_context(results))
