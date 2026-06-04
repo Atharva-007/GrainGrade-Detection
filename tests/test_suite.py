@@ -20,13 +20,13 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
 # Our modules
-from physics_proxies import PhysicsProxiesExtractor
-from vision_rag_pipeline import (
+from ai_grain_grade.physics_proxies import PhysicsProxiesExtractor
+from ai_grain_grade.vision_rag_pipeline import (
     VisionRAGPipeline,
     QualityGrade,
     MoistureRisk,
 )
-from lora_finetune import (
+from ai_grain_grade.lora_finetune import (
     RagiLoRAFinetuner,
     AsymmetricGradingLoss,
     FeedbackCollector,
@@ -238,7 +238,7 @@ class TestVisionRAGPipeline:
     def test_result_formatting(self, pipeline):
         """Test result formatting for API."""
         # Create a mock grading result
-        from vision_rag_pipeline import GradingResult
+        from ai_grain_grade.vision_rag_pipeline import GradingResult
         from datetime import datetime
 
         result = GradingResult(

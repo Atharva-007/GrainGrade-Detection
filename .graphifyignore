@@ -5,10 +5,21 @@ graphify-out/
 
 .claude/
 .codex/
+.code-review-graph/
+.hf-cache/
+.pytest_cache/
+.tmp_streamlit_test/
 __pycache__/
 *.pyc
+*.log
 
 *.env
 .env
+data/feedback/feedback_data/session_uploads/
+data/rag/*.npz
+docs/archive/
+legacy/model-doc-app/app/.env
+models/
 rag_index.npz
 rag_chunks.jsonl
+tmp*/

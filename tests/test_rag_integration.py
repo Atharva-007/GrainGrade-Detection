@@ -4,15 +4,16 @@ Tests for RAG Engine and its Integration with VisionRAGPipeline.
 
 import pytest
 from pathlib import Path
-from rag_engine import RAGEngine
-from vision_rag_pipeline import VisionRAGPipeline
+from ai_grain_grade.rag_engine import RAGEngine
+from ai_grain_grade.vision_rag_pipeline import VisionRAGPipeline
 
-def test_rag_engine_indexing_and_retrieval():
+def test_rag_engine_indexing_and_retrieval(tmp_path):
     """Test that RAGEngine can index documents and retrieve relevant chunks."""
-    engine = RAGEngine(index_path="./test_rag_index.json")
+    index_path = tmp_path / "test_rag_index.json"
+    engine = RAGEngine(index_path=index_path)
     
     # Create a dummy markdown file
-    dummy_doc = Path("test_grading_spec.md")
+    dummy_doc = tmp_path / "test_grading_spec.md"
     dummy_doc.write_text("""
 # Ragi Grading Spec
 ## Grade A
@@ -38,8 +39,8 @@ Grade C ragi has high moisture and visible mold.
     finally:
         if dummy_doc.exists():
             dummy_doc.unlink()
-        if Path("./test_rag_index.json").exists():
-            Path("./test_rag_index.json").unlink()
+        if index_path.exists():
+            index_path.unlink()
 
 def test_pipeline_uses_rag_engine():
     """Test that VisionRAGPipeline correctly uses the RAGEngine for context."""

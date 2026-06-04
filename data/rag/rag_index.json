@@ -1,7 +1,7 @@
 [
   {
     "id": "FAO_BIS_RAGI_RULES_0000",
-    "source": "FAO_BIS_RAGI_RULES.md",
+    "source": "docs/rag/FAO_BIS_RAGI_RULES.md",
     "title": "FAO and BIS-Aligned Ragi Rule Anchors",
     "content": "This file is the authoritative rule anchor used by the local embedding RAG layer.\nIt combines FAO grain-quality guidance with public Indian ragi market and\nprocurement thresholds that reference BIS-style foodgrain analysis terminology\nand sampling methods.\n\nThe app is an operator-assist tool. It does not certify a lot. Official trade,\nprocurement, or food-safety decisions still require laboratory measurement,\nsampling, and applicable legal standards.",
     "tokens": [
@@ -88,9 +88,11 @@
       "anchors",
       "and",
       "bis",
+      "docs",
       "fao",
       "grade",
       "md",
+      "rag",
       "ragi",
       "rule",
       "rules",
@@ -101,7 +103,7 @@
   },
   {
     "id": "FAO_BIS_RAGI_RULES_0001",
-    "source": "FAO_BIS_RAGI_RULES.md",
+    "source": "docs/rag/FAO_BIS_RAGI_RULES.md",
     "title": "Source Notes",
     "content": "- FAO grain quality guidance describes moisture content, foreign matter,\n  infested or infected grain, mixed varieties, colour, and bulk density as major\n  quality and storage factors.\n- FAO safe-storage guidance treats moisture control, clean stores, absence of\n  insects, absence of mould odour, and inspection for heating or discoloured\n  grain as essential storage controls.\n- Public Indian ragi quality documents define ragi as finger millet\n  (`Eleusine coracana`) and require it to be clean, wholesome, reasonably\n  uniform in size, shape, and colour, and free from mould, weevils, obnoxious\n  smell, fungus infestation, and deleterious substances.\n- Public Indian procurement material references BIS foodgrain terminology,\n  analysis, and sampling methods for refractions such as foreign matter,\n  damaged grains, and impurities.\n\nReference URLs used when preparing this rule anchor:\n\n- https://www.fao.org/4/t1838e/t1838e0h.htm\n- https://www.fao.org/4/t1838e/t1838e0i.htm\n- https://www.fao.org/4/V5380E/V5380E06.htm\n- https://www.enam.gov.in/NAMV2/infrastructure/RAGI.pdf\n- https://fci.gov.in/fci-storage/storage/app/uploads/662297b721c361713543095.pdf",
     "tokens": [
@@ -274,11 +276,13 @@
     "section_level": 2,
     "tags": [
       "bis",
+      "docs",
       "fao",
       "grade",
       "md",
       "moisture",
       "notes",
+      "rag",
       "ragi",
       "rules",
       "safety",
@@ -289,7 +293,7 @@
   },
   {
     "id": "FAO_BIS_RAGI_RULES_0002",
-    "source": "FAO_BIS_RAGI_RULES.md",
+    "source": "docs/rag/FAO_BIS_RAGI_RULES.md",
     "title": "Hard Reject or Hold Gates",
     "content": "Assign `C` and recommend reject or hold if any of these are detected:\n\n- visible mould or fungal growth\n- live insects, weevils, webbing, or clear insect contamination\n- obnoxious smell, sour smell, or visible heating/wet storage signs\n- stones, glass, metallic pieces, mud lumps, or deleterious substances\n- foreign matter greater than `1.0%`\n- moisture greater than `14.0%` by weight for visual market grading\n- damaged, weevilled, immature, and shrivelled grains greater than `9.5%`\n- animal-origin impurities greater than `0.10%` if known\n- mineral matter greater than `0.25%` if known",
     "tokens": [
@@ -386,6 +390,7 @@
     "section_level": 2,
     "tags": [
       "bis",
+      "docs",
       "fao",
       "gates",
       "hard",
@@ -393,6 +398,7 @@
       "md",
       "moisture",
       "or",
+      "rag",
       "ragi",
       "reject",
       "rules",
@@ -403,7 +409,7 @@
   },
   {
     "id": "FAO_BIS_RAGI_RULES_0003",
-    "source": "FAO_BIS_RAGI_RULES.md",
+    "source": "docs/rag/FAO_BIS_RAGI_RULES.md",
     "title": "Grade A Rule",
     "content": "Assign `A` only when all visible and measured evidence is in the premium range:\n\n- moisture `<= 12.0%`\n- foreign matter `<= 0.10%`\n- other edible grains `<= 1.0%`\n- damaged, weevilled, immature, and shrivelled grains `<= 3.1%`\n- off-tone grain fraction `< 5.0%`\n- size deviation `< 5.0%`\n- shape defect fraction `< 5.0%`\n- no mould, no insect evidence, no webbing, no stones, no strong clumping\n- lot is visually uniform in size, shape, and colour",
     "tokens": [
@@ -475,10 +481,12 @@
     "tags": [
       "a",
       "bis",
+      "docs",
       "fao",
       "grade",
       "md",
       "moisture",
+      "rag",
       "ragi",
       "rule",
       "rules",
@@ -489,7 +497,7 @@
   },
   {
     "id": "FAO_BIS_RAGI_RULES_0004",
-    "source": "FAO_BIS_RAGI_RULES.md",
+    "source": "docs/rag/FAO_BIS_RAGI_RULES.md",
     "title": "Grade B Rule",
     "content": "Assign `B` only when the lot is usable but not premium:\n\n- moisture `> 12.0% and <= 13.0%`, or visual moisture risk is moderate\n- foreign matter `> 0.10% and <= 0.75%`\n- other edible grains `> 1.0% and <= 2.0%`\n- damaged, weevilled, immature, and shrivelled grains `> 3.1% and <= 6.3%`\n- small off-tone or size variation is present but no hard reject gate is present",
     "tokens": [
@@ -555,10 +563,12 @@
     "tags": [
       "b",
       "bis",
+      "docs",
       "fao",
       "grade",
       "md",
       "moisture",
+      "rag",
       "ragi",
       "rule",
       "rules",
@@ -569,7 +579,7 @@
   },
   {
     "id": "FAO_BIS_RAGI_RULES_0005",
-    "source": "FAO_BIS_RAGI_RULES.md",
+    "source": "docs/rag/FAO_BIS_RAGI_RULES.md",
     "title": "Grade C Rule",
     "content": "Assign `C` when the lot is poor quality but still inside the outer visual market\nrange and no immediate food-safety hazard is proven:\n\n- moisture `> 13.0% and <= 14.0%`\n- foreign matter `> 0.75% and <= 1.0%`\n- other edible grains `> 2.0% and <= 4.0%`\n- damaged, weevilled, immature, and shrivelled grains `> 6.3% and <= 9.5%`\n- off-tone grain fraction `> 10.0%`\n- size deviation `> 15.0%`\n- shape defect fraction `> 10.0%`\n- broken or damaged grain estimate `> 5.0%`\n- bimodal colour, mixed lot appearance, heavy dullness, or moisture clumping",
     "tokens": [
@@ -653,10 +663,12 @@
     "tags": [
       "bis",
       "c",
+      "docs",
       "fao",
       "grade",
       "md",
       "moisture",
+      "rag",
       "ragi",
       "rule",
       "rules",
@@ -667,7 +679,7 @@
   },
   {
     "id": "FAO_BIS_RAGI_RULES_0006",
-    "source": "FAO_BIS_RAGI_RULES.md",
+    "source": "docs/rag/FAO_BIS_RAGI_RULES.md",
     "title": "Moisture Interpretation",
     "content": "For this app, moisture is a separate safety/storage axis and can downgrade a\nquality grade:\n\n- `LOW`: `<= 12.0%`, Grade A may be allowed if all quality gates pass.\n- `MODERATE`: `> 12.0% and <= 13.0%`, Grade A is blocked.\n- `HIGH`: `> 13.0% and <= 14.0%`, Grade C or hold is preferred.\n- `CRITICAL`: `> 14.0%`, reject or dry immediately before storage.\n\nFAO safe-storage guidance is broader for millet storage, but Indian ragi market\ngrading is stricter. The rule engine therefore uses the stricter ragi thresholds\nfor grade decisions.",
     "tokens": [
@@ -761,11 +773,13 @@
     "section_level": 2,
     "tags": [
       "bis",
+      "docs",
       "fao",
       "grade",
       "interpretation",
       "md",
       "moisture",
+      "rag",
       "ragi",
       "rules",
       "standards",
@@ -775,7 +789,7 @@
   },
   {
     "id": "AUTHORIZED_RAGI_DATA_SOURCES_0000",
-    "source": "AUTHORIZED_RAGI_DATA_SOURCES.md",
+    "source": "docs/rag/AUTHORIZED_RAGI_DATA_SOURCES.md",
     "title": "Authorized Ragi Data and Physical-Property Sources",
     "content": "This file is a retrieval anchor for improving the ragi grading model with\npublic, official, or institutionally authoritative sources. It is not a claim\nthat the app certifies grain. Legal procurement, food-safety, and trade\ndecisions still require applicable official sampling, lab measurement, and\ninspection procedures.",
     "tokens": [
@@ -840,10 +854,12 @@
       "and",
       "authorized",
       "data",
+      "docs",
       "grade",
       "md",
       "physical",
       "property",
+      "rag",
       "ragi",
       "sources",
       "standards"
@@ -852,7 +868,7 @@
   },
   {
     "id": "AUTHORIZED_RAGI_DATA_SOURCES_0001",
-    "source": "AUTHORIZED_RAGI_DATA_SOURCES.md",
+    "source": "docs/rag/AUTHORIZED_RAGI_DATA_SOURCES.md",
     "title": "Official Threshold and Assaying Sources",
     "content": "- e-NAM RAGI assaying specification:\n  https://www.enam.gov.in/NAMV2/infrastructure/RAGI.pdf\n- Food Corporation of India public procurement specifications:\n  https://fci.gov.in/fci-storage/storage/app/uploads/662297b721c361713543095.pdf\n- Food Safety and Standards Authority of India cereal and cereal-products\n  standards:\n  https://www.fssai.gov.in/upload/uploadfiles/files/Chapter%202_4_Cereals_and_Cereal_products.pdf\n- FAO grain-quality and storage guidance:\n  https://www.fao.org/4/t1838e/t1838e0h.htm\n  https://www.fao.org/4/t1838e/t1838e0i.htm\n  https://www.fao.org/4/V5380E/V5380E06.htm\n\nUse these sources for moisture, foreign matter, damaged grains, insect/mould\nhazards, storage condition, sampling vocabulary, and operator-facing reject or\nhold rules.",
     "tokens": [
@@ -978,8 +994,10 @@
       "assaying",
       "authorized",
       "data",
+      "docs",
       "md",
       "official",
+      "rag",
       "ragi",
       "sources",
       "standards",
@@ -990,7 +1008,7 @@
   },
   {
     "id": "AUTHORIZED_RAGI_DATA_SOURCES_0002",
-    "source": "AUTHORIZED_RAGI_DATA_SOURCES.md",
+    "source": "docs/rag/AUTHORIZED_RAGI_DATA_SOURCES.md",
     "title": "Agmark and Market Data Sources",
     "content": "- AGMARKNET / Directorate of Marketing and Inspection market information:\n  https://agmarknet.gov.in/\n- data.gov.in crop statistics for ragi area, production, and yield:\n  https://www.data.gov.in/\n- data.gov.in and AGMARKNET market arrivals/prices can be used as market\n  context datasets. They should not be used as image labels.\n\nUse market data for trend analysis, region/crop metadata, and operational\ndashboards. Do not train visual quality labels from price alone; price is\nconfounded by market, season, variety, seller, and procurement policy.",
     "tokens": [
@@ -1091,8 +1109,10 @@
       "and",
       "authorized",
       "data",
+      "docs",
       "market",
       "md",
+      "rag",
       "ragi",
       "sources",
       "training"
@@ -1101,7 +1121,7 @@
   },
   {
     "id": "AUTHORIZED_RAGI_DATA_SOURCES_0003",
-    "source": "AUTHORIZED_RAGI_DATA_SOURCES.md",
+    "source": "docs/rag/AUTHORIZED_RAGI_DATA_SOURCES.md",
     "title": "Physical Properties To Extract From Images",
     "content": "The model should inspect these calibrated physical properties for each lot:\n\n- Size: median equivalent grain diameter, p10/p90 diameter, size class\n  (`small`, `normal`, `large`, `mixed`), and coefficient of variation.\n- Shape: aspect ratio, roundness, elongated or broken-looking components,\n  shrivelled/immature-looking small components, and clumped large components.\n- Surface reflectance: shine index, highlight fraction, dullness, dark fraction,\n  and glare risk.\n- Colour and tone: darkness index, LAB L/a/b shift, off-tone fraction, bimodal\n  colour, and uniformity.\n- Texture: entropy, roughness, smooth/moisture-like surface, and high-contrast\n  broken or foreign particles.\n- Layout and capture quality: calibrated sample field, mask coverage, grain-fill\n  ratio, grid or marker confidence, reference patch visibility, blur, exposure,\n  and retake flags.",
     "tokens": [
@@ -1231,12 +1251,14 @@
     "tags": [
       "authorized",
       "data",
+      "docs",
       "extract",
       "from",
       "images",
       "md",
       "physical",
       "properties",
+      "rag",
       "ragi",
       "sources",
       "to"
@@ -1245,7 +1267,7 @@
   },
   {
     "id": "AUTHORIZED_RAGI_DATA_SOURCES_0004",
-    "source": "AUTHORIZED_RAGI_DATA_SOURCES.md",
+    "source": "docs/rag/AUTHORIZED_RAGI_DATA_SOURCES.md",
     "title": "Dataset Rules",
     "content": "Production training data must store:\n\n- raw original image without destructive resize\n- calibrated crop and visual overlay artifacts\n- calibration source (`aruco-grid`, `marker-grid`, `grid-only`, or fallback)\n- pixels-per-mm and grid spacing used\n- per-grain physical-property summary\n- operator grade correction\n- measured moisture percentage when available, with method and device\n- source of legal threshold used for the decision\n\nRecommended splits:\n\n- split by farm, market, phone/camera family, and capture date to avoid leakage\n- keep flash/no-flash and repeat captures together in the same split\n- hold out at least one region or market for robustness checks\n\nDo not create moisture ground truth from visual appearance alone. Visual features\ncan support moisture-risk estimation, but calibrated moisture percentages need\nmeter or laboratory measurements.",
     "tokens": [
@@ -1382,9 +1404,11 @@
       "authorized",
       "data",
       "dataset",
+      "docs",
       "grade",
       "md",
       "moisture",
+      "rag",
       "ragi",
       "rules",
       "sources",
@@ -1395,7 +1419,7 @@
   },
   {
     "id": "ARCHITECTURE_0000",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Overview",
     "content": "**Millets Now** is a production-grade AI system for automated quality grading and moisture risk assessment of finger millet (ragi), a critical staple crop in India and Africa. The system is specifically designed for deployment on low-end edge devices with harsh field lighting conditions.",
     "tokens": [
@@ -1451,16 +1475,18 @@
     "section_level": 2,
     "tags": [
       "architecture",
+      "docs",
       "grade",
       "md",
       "moisture",
-      "overview"
+      "overview",
+      "rag"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0001",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Key Differentiator: Asymmetric Safety Focus",
     "content": "Unlike generic crop classification systems, Millets Now prioritizes **false-safe prevention**. Predicting a moldy grain as safe is 5x worse than conservative false-risky predictions. This is enforced via Asymmetric Loss Function in the active learning pipeline.\n\n---",
     "tokens": [
@@ -1514,16 +1540,18 @@
       "architecture",
       "asymmetric",
       "differentiator",
+      "docs",
       "focus",
       "key",
       "md",
+      "rag",
       "safety"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0002",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Layer 1: Physics-Based Proxies (Edge Processing) (part 1)",
     "content": "**Component:** `physics_proxies.py` | **Language:** Python + OpenCV\n\n#### Rationale\n- Single-image analysis (no multi-image fusion)\n- Explainable features linked to physics principles\n- Lightweight enough for edge devices\n- Validated against manual visual inspection\n\n#### Features Extracted\n\n1. **Texture Entropy**\n   - **Physics:** Shannon entropy of Laplacian magnitude\n   - **Interpretation:** High entropy = rough surface (dry grain)\n   - **Low entropy → Smooth surface (wet, clumped)\n   - **Calculation:** Histogram binning (16 bins), Shannon formula\n   - **Range:** 0-4 bits\n   - **Proxy Strength:** High (Laplacian captures surface texture)\n\n2. **LAB Color Shifts**\n   - **Physics:** CIE-LAB color space analysis\n   - **Components:**\n     - L* (Lightness, 0-100): Higher = brighter (dry)\n     - a* (Red-Green, -128 to 127): Grain hue\n     - b* (Yellow-Blue, -128 to 127): Grain tone\n   - **Moisture Indicator:** Lower L* = darker grain (moisture absorbed)\n   - **Color Darkness Index:** Inverted L*, normalized to 0-100\n   - **Proxy Strength:** Medium (moisture absorption visible but indirect)\n\n3. **Capillary Clumping**\n   - **Physics:** Connected-component analysis on grain binary mask",
     "tokens": [
@@ -1674,19 +1702,21 @@
     "tags": [
       "architecture",
       "based",
+      "docs",
       "edge",
       "layer",
       "md",
       "part",
       "physics",
       "processing",
-      "proxies"
+      "proxies",
+      "rag"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0003",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Layer 1: Physics-Based Proxies (Edge Processing) (part 2)",
     "content": "d to 0-100\n   - **Proxy Strength:** Medium (moisture absorption visible but indirect)\n\n3. **Capillary Clumping**\n   - **Physics:** Connected-component analysis on grain binary mask\n   - **Mechanism:** Wet grains stick together via capillary forces\n   - **Metric:** Max cluster size / total grain pixels\n   - **Range:** 0.0-1.0 (higher = more clumping = wetter)\n   - **Threshold:** >0.3 indicates HIGH moisture risk\n   - **Proxy Strength:** High (direct indicator of moisture-induced adhesion)\n\n4. **Surface Roughness**\n   - **Physics:** Laplacian variance (texture variance)\n   - **High variance = rough surface (dry grain typical)\n   - **Low variance = smooth surface (wet/compressed)\n   - **Normalized:** 0-100 scale\n   - **Proxy Strength:** Medium\n\n5. **Specular Highlights**\n   - **Physics:** Ratio of bright pixels (>200 intensity) to total grain\n   - **Note:** In diffused lighting, highlights are minimal\n   - **Used as:** Quality check (not primary moisture indicator)\n   - **Proxy Strength:** Low\n\n6. **Grain Uniformity**\n   - **Physics:** Coefficient of variation (CV) of HSV Value channel\n   - **Interpretation:** Low CV = uniform color (Grade A typical)",
     "tokens": [
@@ -1833,6 +1863,7 @@
     "tags": [
       "architecture",
       "based",
+      "docs",
       "edge",
       "layer",
       "md",
@@ -1841,13 +1872,14 @@
       "physics",
       "processing",
       "proxies",
+      "rag",
       "thresholds"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0004",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Layer 1: Physics-Based Proxies (Edge Processing) (part 3)",
     "content": "roxy Strength:** Low\n\n6. **Grain Uniformity**\n   - **Physics:** Coefficient of variation (CV) of HSV Value channel\n   - **Interpretation:** Low CV = uniform color (Grade A typical)\n   - **High CV = bimodal/mixed quality (Grade C indicator)\n   - **Range:** 0-100 (higher = more uniform)\n   - **Proxy Strength:** Medium\n\n#### Processing Pipeline\n```\nRaw Image → Segmentation (HSV color range)\n        ↓\n   Morphology (close/open) → Binary mask\n        ↓\n   Compute all 6 proxies in parallel\n        ↓\n   Normalize & return JSON\n```\n\n#### Performance\n- **Latency:** ~200ms per image (on mobile CPU)\n- **Memory:** ~50MB (including OpenCV)\n- **Accuracy:** Physics proxies are deterministic (no ML variance)\n\n---",
     "tokens": [
@@ -1944,6 +1976,7 @@
     "tags": [
       "architecture",
       "based",
+      "docs",
       "edge",
       "grade",
       "layer",
@@ -1952,13 +1985,14 @@
       "physics",
       "processing",
       "proxies",
+      "rag",
       "thresholds"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0005",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Layer 2: Vision-RAG Pipeline (Cloud Inference) (part 1)",
     "content": "**Component:** `vision_rag_pipeline.py` | **Language:** Python + HTTP\n\n#### Two-Pass Inference Strategy\n\n**Philosophy:** Conservative grading with explicit safety gates. Never assume safety without evidence.\n\n**Pass 1: Safety Gate Detection**\n```\nInput: Raw image\n├─ Call Qwen2.5-VL with specialized safety prompt\n├─ LLM identifies: mold, stones, insects, webbing, foreign matter\n├─ Returns: Bounding boxes + confidence\n└─ If hazard found → Grade C + reject_recommended=true\n```\n\n**Pass 2: RAG-Guided Grading** (only if Pass 1 safe)\n```\nInput: Image + Physics proxies\n├─ Retrieve relevant rules from Vector DB (RAG)\n├─ Build comprehensive prompt with:\n│  ├─ Physics proxy signals (strong evidence)\n│  ├─ Retrieved BIS grading rules\n│  └─ Image analysis from Qwen2.5-VL\n├─ Generate JSON with grade + metrics\n├─ Apply deterministic grading logic\n└─ Output: Grade + Confidence + Audit trail\n```\n\n#### Deterministic Grading Logic\n\nAfter LLM assessment, apply canonical rules:\n\n**Grade A (Strict)**\n```\nif:\n  off_tone < 5% AND\n  size_deviation < 5% AND\n  shape_defect < 5% AND\n  foreign_matter < 1% AND\n  not mold_visible\nthen: Grade A (score: 90)\n```\n\n**Grade C (Clear Failure)**\n```\nif:",
     "tokens": [
@@ -2123,6 +2157,7 @@
     "tags": [
       "architecture",
       "cloud",
+      "docs",
       "grade",
       "inference",
       "layer",
@@ -2137,7 +2172,7 @@
   },
   {
     "id": "ARCHITECTURE_0006",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Layer 2: Vision-RAG Pipeline (Cloud Inference) (part 2)",
     "content": "off_tone < 5% AND\n  size_deviation < 5% AND\n  shape_defect < 5% AND\n  foreign_matter < 1% AND\n  not mold_visible\nthen: Grade A (score: 90)\n```\n\n**Grade C (Clear Failure)**\n```\nif:\n  mold_visible OR\n  foreign_matter > 3%\nthen: Grade C + reject (score: 25)\n\nOR if:\n  off_tone > 10% OR\n  size_deviation > 15% OR\n  shape_defect > 10% OR\n  broken_grain > 5%\nthen: Grade C (score: 55)\n```\n\n**Grade B (Default/Middle)**\n```\nif: not A and not C\nthen: Grade B (score: 75)\n```\n\n#### Moisture Risk Classification\n```python\nmoisture_score = (\n  darkness_idx (0-100) +\n  clumping_density * 200 (0-100) +\n  (40 - entropy) * 5 (0-100)  # Inverse entropy\n) / 3.0\n\nif moisture_score ≤ 30: LOW\nelif moisture_score ≤ 50: MODERATE\nelif moisture_score ≤ 70: HIGH\nelse: CRITICAL\n```\n\n#### RAG Context Retrieval\n\n**Heuristic-based retrieval:**\n- If clumping_density > 0.2 OR entropy < 3.0 → retrieve moisture rules\n- Always retrieve grading rules + safety rules\n- Return top-5 most relevant chunks\n\n**Production: Vector DB Integration**\n- Embedding: bge-m3 (BERT-based multilingual)\n- Storage: Supabase (Postgres + pgvector) or Pinecone\n- Retrieval: Semantic similarity search",
     "tokens": [
@@ -2307,6 +2342,7 @@
     "tags": [
       "architecture",
       "cloud",
+      "docs",
       "grade",
       "inference",
       "layer",
@@ -2322,7 +2358,7 @@
   },
   {
     "id": "ARCHITECTURE_0007",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Layer 2: Vision-RAG Pipeline (Cloud Inference) (part 3)",
     "content": "s\n\n**Production: Vector DB Integration**\n- Embedding: bge-m3 (BERT-based multilingual)\n- Storage: Supabase (Postgres + pgvector) or Pinecone\n- Retrieval: Semantic similarity search\n- Chunks: Extracted from UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md\n\n#### API Integration\n\n**Provider:** SiliconFlow (https://siliconflow.cn)\n\n**Model:** Qwen/Qwen2.5-VL-7B-Instruct\n\n**Endpoint:** `https://api.siliconflow.cn/v1/chat/completions`\n\n**Payload:**\n```json\n{\n  \"model\": \"Qwen/Qwen2.5-VL-7B-Instruct\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\"url\": \"data:image/jpeg;base64,...\"}\n        },\n        {\"type\": \"text\", \"text\": \"Analyze this ragi...\"}\n      ]\n    }\n  ],\n  \"max_tokens\": 1000,\n  \"temperature\": 0.3\n}\n```\n\n**Response Parsing:** Extract JSON from LLM output, with fallback to conservative grading\n\n#### Confidence Computation\n```python\noverall_confidence = (\n  model_confidence (0-100) +\n  physics_quality * 1.5 (normalized) +\n  rag_relevance * 20 (scaled by chunk count)\n) / 3.0\n```\n\n---",
     "tokens": [
@@ -2453,6 +2489,7 @@
     "tags": [
       "architecture",
       "cloud",
+      "docs",
       "grade",
       "inference",
       "layer",
@@ -2467,7 +2504,7 @@
   },
   {
     "id": "ARCHITECTURE_0008",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Layer 3: Active Learning with LoRA Fine-Tuning",
     "content": "**Component:** `lora_finetune.py` | **Language:** Python + PyTorch\n\n#### Why LoRA?\n- Low-rank updates only (~1% of original weights)\n- Fast training (3 epochs ≈ 10 minutes on GPU)\n- Easy deployment (LoRA weights only, base model unchanged)\n- Continuous improvement without model retraining\n\n#### Asymmetric Loss Function\n\n**Critical Innovation:** 5x penalty for false-safe predictions\n\n```python\nloss = cross_entropy(logits, labels)",
     "tokens": [
@@ -2538,11 +2575,13 @@
     "tags": [
       "active",
       "architecture",
+      "docs",
       "fine",
       "layer",
       "learning",
       "lora",
       "md",
+      "rag",
       "training",
       "tuning",
       "with"
@@ -2551,7 +2590,7 @@
   },
   {
     "id": "ARCHITECTURE_0009",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Identify false-safe errors",
     "content": "false_safe = (predicted < 2) & (true == 2)",
     "tokens": [
@@ -2569,17 +2608,19 @@
     "section_level": 1,
     "tags": [
       "architecture",
+      "docs",
       "errors",
       "false",
       "identify",
       "md",
+      "rag",
       "safe"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0010",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Apply asymmetric weights (part 1)",
     "content": "weights = torch.ones_like(loss)\nweights[false_safe] = 5.0\n\nfinal_loss = (loss * weights).mean()\n```\n\n**Rationale:** Moldy grain causing foodborne illness → business/health failure\n\n#### Feedback Collection Pipeline\n\n**User Submits Correction:**\n1. System: \"I predicted Grade B\"\n2. Farmer: \"Actually, it's Grade A\" (or Grade C with reason)\n3. Click \"Submit Feedback\"\n4. System stores locally + uploads to HF dataset\n\n**Stored as:**\n```python\n@dataclass\nclass GradingFeedbackItem:\n    sample_id: str          # E.g., \"FARM-001-BATCH-04-001\"\n    image_path: str         # Path to image\n    farm_id: str            # For GroupKFold split\n    predicted_grade: str    # AI prediction (A/B/C)\n    true_grade: str         # Human correction\n    predicted_moisture_risk: str\n    true_moisture_risk: str\n    image_features: Dict    # Physics proxies\n    confidence: float       # AI confidence\n    timestamp: str\n    device_model: str\n```\n\n#### Training Trigger\n\n**Condition:** Pending feedback ≥ 500 samples\n\n**When Triggered:**\n1. Download all feedback from HF dataset\n2. Split by farm_id (GroupKFold: prevents farm bias)\n3. Create DataLoader with batch_size=8\n4. Train for 3 epochs with AdamW (lr=1e-4)",
     "tokens": [
@@ -2743,9 +2784,11 @@
       "apply",
       "architecture",
       "asymmetric",
+      "docs",
       "grade",
       "md",
       "part",
+      "rag",
       "safety",
       "training",
       "weights"
@@ -2754,7 +2797,7 @@
   },
   {
     "id": "ARCHITECTURE_0011",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Apply asymmetric weights (part 2)",
     "content": "d:**\n1. Download all feedback from HF dataset\n2. Split by farm_id (GroupKFold: prevents farm bias)\n3. Create DataLoader with batch_size=8\n4. Train for 3 epochs with AdamW (lr=1e-4)\n5. Evaluate on held-out test farms\n6. Save best checkpoint\n7. Upload LoRA weights to HF Hub\n\n#### Training Loop\n\n```python\nfor epoch in range(3):\n    for batch in train_loader:\n        features = batch['features']\n        true_grades = batch['true_grade']\n        \n        logits = model(features)\n        loss = asymmetric_loss(logits, true_grades)\n        \n        loss.backward()\n        optimizer.step()\n        optimizer.zero_grad()\n    \n    # Evaluate on test set\n    accuracy = evaluate(test_loader)\n    false_safe_rate = compute_false_safe_rate(test_loader)\n    \n    if accuracy > best_accuracy:\n        save_checkpoint()\n```\n\n#### GroupKFold Cross-Validation\n\n**Reason:** Prevent data leakage by farm\n\n```python\ntrain_farms = ['FARM-01', 'FARM-02', 'FARM-03', ...]  (80%)\ntest_farms = ['FARM-10', 'FARM-11', 'FARM-12', ...]  (20%)",
     "tokens": [
@@ -2898,8 +2941,10 @@
       "apply",
       "architecture",
       "asymmetric",
+      "docs",
       "md",
       "part",
+      "rag",
       "thresholds",
       "training",
       "weights"
@@ -2908,7 +2953,7 @@
   },
   {
     "id": "ARCHITECTURE_0012",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Prevents model from learning farm-specific artifacts",
     "content": "```\n\n#### Metrics Tracked\n\n- **Accuracy:** (TP + TN) / Total\n- **False-Safe Rate:** FN / (TP + FN) - **Primary concern**\n- **False-Risky Rate:** FP / (TN + FP)\n- **Per-Grade Recall:** Ensure all grades learned well\n- **Confusion Matrix:** Detailed error analysis\n\n---",
     "tokens": [
@@ -2959,6 +3004,7 @@
     "tags": [
       "architecture",
       "artifacts",
+      "docs",
       "farm",
       "from",
       "grade",
@@ -2966,13 +3012,14 @@
       "md",
       "model",
       "prevents",
+      "rag",
       "specific"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0013",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Layer 4: Streamlit Web Interface (part 1)",
     "content": "**Component:** `app.py` | **Language:** Python + Streamlit + HTML\n\n#### Five-Tab Design\n\n**Tab 1: Analyze**\n- Image upload + validation\n- Real-time physics proxies extraction\n- Vision-RAG inference\n- Results display with confidence & audit trail\n\n**Tab 2: Results History**\n- Historical grading results (from DB, optional)\n- Export to CSV/Excel\n- Search & filter by farm/batch/date\n\n**Tab 3: Feedback & Training**\n- Display last AI prediction\n- User corrects grade\n- Submit feedback → HF dataset\n- Show pending feedback count\n- Trigger LoRA training at 500 samples\n\n**Tab 4: Dashboard**\n- System metrics (total samples, accuracy, etc.)\n- Grade distribution chart\n- Moisture risk distribution\n- Per-device performance table\n- Confidence calibration plot\n\n**Tab 5: About**\n- System architecture explanation\n- Feature descriptions\n- Deployment guides\n- Troubleshooting\n\n#### Session State Management\n\n```python\nst.session_state[\"last_result\"] = {\n    \"timestamp\": ...,\n    \"image_path\": ...,\n    \"predicted_grade\": ...,\n    \"predicted_moisture\": ...,\n    \"confidence\": ...,\n    \"proxies\": {...},\n    \"grading_result\": {...}\n}\n```\n\n#### Caching Strategy\n\n```python\n@st.cache_resource",
     "tokens": [
@@ -3117,11 +3164,13 @@
     "tags": [
       "architecture",
       "confidence",
+      "docs",
       "grade",
       "interface",
       "layer",
       "md",
       "part",
+      "rag",
       "streamlit",
       "training",
       "validation",
@@ -3131,7 +3180,7 @@
   },
   {
     "id": "ARCHITECTURE_0014",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Layer 4: Streamlit Web Interface (part 2)",
     "content": "cted_grade\": ...,\n    \"predicted_moisture\": ...,\n    \"confidence\": ...,\n    \"proxies\": {...},\n    \"grading_result\": {...}\n}\n```\n\n#### Caching Strategy\n\n```python\n@st.cache_resource\ndef init_extractors():\n    extractor = PhysicsProxiesExtractor()\n    pipeline = VisionRAGPipeline(...)\n    collector = FeedbackCollector(...)\n    return extractor, pipeline, collector\n```\n\n---",
     "tokens": [
@@ -3174,12 +3223,14 @@
     "tags": [
       "architecture",
       "confidence",
+      "docs",
       "grade",
       "interface",
       "layer",
       "md",
       "moisture",
       "part",
+      "rag",
       "streamlit",
       "training",
       "web"
@@ -3188,7 +3239,7 @@
   },
   {
     "id": "ARCHITECTURE_0015",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Data Flow Diagram (part 1)",
     "content": "```\n┌─────────────────────────────────────────────────────────────────────┐\n│  FARMER/OPERATOR                                                    │\n│  - Captures image (or uploads existing)                             │\n│  - Reviews grading result                                           │\n│  - Optionally corrects grade & submits feedback                     │\n└──────────────────────────────────────────────────────────────────┬──┘\n                                                                     │\n                    ┌────────────────────────────────────────────────┘\n                    │\n            ┌───────▼─────────┐\n            │ Streamlit UI    │\n            │ (app.py)        │\n            └───────┬─────────┘\n                    │\n        ┌───────────┼───────────┐\n        │           │           │\n┌───────▼─┐  ┌──────▼─────┐  ┌─▼──────────────┐\n│ Physics │  │ Vision-RAG │  │ Feedback       │\n│ Proxies │  │ Pipeline   │  │ Collector      │\n│ (.py)   │  │ (Qwen2.5)  │  │                │\n└────┬────┘  └──────┬─────┘  └─┬──────────────┘\n     │              │          │\n     ├──────────────┼──────────┤\n     │              │          │\n     │      ┌───────▼──────┐   │",
     "tokens": [
@@ -3232,17 +3283,19 @@
       "architecture",
       "data",
       "diagram",
+      "docs",
       "flow",
       "grade",
       "md",
       "part",
+      "rag",
       "training"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0016",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Data Flow Diagram (part 2)",
     "content": "└────┬────┘  └──────┬─────┘  └─┬──────────────┘\n     │              │          │\n     ├──────────────┼──────────┤\n     │              │          │\n     │      ┌───────▼──────┐   │\n     │      │ Grading      │   │\n     │      │ Result       │   │\n     │      └───────┬──────┘   │\n     │              │          │\n     └──────────┬───┴──────┬───┘\n                │          │\n         ┌──────▼──┐   ┌───▼──────────┐\n         │ Display │   │ HF Dataset    │\n         │ to User │   │ + LoRA Loop   │\n         └─────────┘   └────┬─────────┘\n                            │\n                     ┌──────▼──────────┐\n                     │ LoRA Training   │\n                     │ (500 samples)   │\n                     │ - Asymmetric    │\n                     │   Loss Function │\n                     │ - GroupKFold    │\n                     │ - Periodic      │\n                     └─────────────────┘\n```\n\n---",
     "tokens": [
@@ -3276,16 +3329,18 @@
       "architecture",
       "data",
       "diagram",
+      "docs",
       "flow",
       "grade",
       "md",
-      "part"
+      "part",
+      "rag"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0017",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Threat Model & Mitigation",
     "content": "| Threat | Impact | Mitigation |\n|--------|--------|-----------|\n| **False-Safe (moldy predicted safe)** | CRITICAL | Asymmetric loss 5x, manual verification for HIGH confidence+ moisture CRITICAL |\n| **False-Risky (good grain rejected)** | High | Monitor false-risky rate, tune threshold based on feedback |\n| **Corrupted image detection** | Medium | Laplacian variance (blur), luminance check, file integrity |\n| **Out-of-distribution samples** | Medium | Confidence threshold (reject <60%), encourage retake |\n| **Model drift over time** | Medium | Continuous LoRA retraining every 500 samples |\n| **Privacy/data leakage** | Medium | Local storage, user data deletion on request |\n| **API downtime** | Low | Fallback to physics-proxies-only conservative grading |\n\n---",
     "tokens": [
@@ -3387,10 +3442,12 @@
     "tags": [
       "architecture",
       "confidence",
+      "docs",
       "md",
       "mitigation",
       "model",
       "moisture",
+      "rag",
       "safety",
       "threat",
       "thresholds",
@@ -3401,7 +3458,7 @@
   },
   {
     "id": "ARCHITECTURE_0018",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "File Structure",
     "content": "```\ndocs/prompts/model-doc/\n├── app.py                              # Streamlit UI\n├── physics_proxies.py                  # Physics-based feature extraction\n├── vision_rag_pipeline.py              # Vision-RAG inference engine\n├── lora_finetune.py                    # Active learning pipeline\n├── requirements.txt                    # Python dependencies\n├── test_suite.py                       # Integration tests\n├── deploy.sh                           # Deployment automation\n├── .env.example                        # Environment template\n├── README_DEPLOYMENT.md                # Deployment guide\n├── DEPLOYMENT_CHECKLIST.md             # Pre-production checklist\n├── ARCHITECTURE.md                     # This document\n├── feedback_data/                      # Human-corrected feedback storage\n├── models/                             # Saved LoRA checkpoints\n├── logs/                               # Application logs\n└── results/                            # Exported grading results\n```\n\n---",
     "tokens": [
@@ -3491,15 +3548,17 @@
     "section_level": 2,
     "tags": [
       "architecture",
+      "docs",
       "file",
       "md",
+      "rag",
       "structure"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0019",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Performance Characteristics",
     "content": "| Component | Latency | Memory | Accuracy Notes |\n|-----------|---------|--------|-----------------|\n| Physics Proxies | 200ms | 50MB | 100% (deterministic) |\n| Vision-RAG | 2-5s | 8GB | 87% (on 142 samples, with feedback) |\n| LoRA Training | 10min/epoch | 6GB | Improving with feedback |\n| **End-to-End** | **2.5-6s** | **8GB** | **Confidence: 60-92%** |\n\n**Notes:**\n- Latencies are for CPU inference; GPU reduces by 50-70%\n- Training batch size: 8, ~10min for 3 epochs on single GPU\n- Memory assumes base model + LoRA adapter cached in memory\n\n---",
     "tokens": [
@@ -3579,15 +3638,17 @@
       "architecture",
       "characteristics",
       "confidence",
+      "docs",
       "md",
       "performance",
+      "rag",
       "training"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0020",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "Future Enhancements",
     "content": "1. **Multi-Crop Support:** Extend from ragi to wheat, rice, maize\n2. **Calibration Module:** Convert RGB darkness → absolute moisture percentage\n3. **Hyperspectral Imaging:** Near-infrared for deeper moisture penetration\n4. **Federated Learning:** Train on distributed edge devices without data centralization\n5. **Real-Time Dashboard:** WebSocket streaming of results to farm management system\n6. **Mobile App:** Flutter companion app for field operators\n7. **Robustness:** Domain adaptation for different lighting, camera devices, global locations\n\n---",
     "tokens": [
@@ -3664,17 +3725,19 @@
     "section_level": 2,
     "tags": [
       "architecture",
+      "docs",
       "enhancements",
       "future",
       "md",
       "moisture",
+      "rag",
       "thresholds"
     ],
     "index_version": 2
   },
   {
     "id": "ARCHITECTURE_0021",
-    "source": "ARCHITECTURE.md",
+    "source": "docs/rag/ARCHITECTURE.md",
     "title": "References & Citations",
     "content": "- **Specification:** `UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md`\n- **BIS Standards:** Indian Standards for Finger Millet Grading\n- **ML Papers:**\n  - LoRA: \"LoRA: Low-Rank Adaptation of Large Language Models\" (Hu et al., 2021)\n  - Asymmetric Loss: \"Asymmetric Loss For Multi-Label Classification\" (Ridnik et al., 2021)\n- **Tech Stack:**\n  - Qwen2.5-VL: Alibaba's open multimodal LLM\n  - SiliconFlow: API inference provider for large models\n  - Supabase: Open-source Firebase alternative with pgvector\n  - Streamlit: Rapid ML app development framework\n\n---\n\n**Document Status:** ✅ Complete & Production-Ready  \n**Last Updated:** 2026-04-29  \n**Author:** Copilot (AI Architect)",
     "tokens": [
@@ -3772,9 +3835,11 @@
     "tags": [
       "architecture",
       "citations",
+      "docs",
       "grade",
       "md",
       "moisture",
+      "rag",
       "references",
       "standards"
     ],
@@ -3782,7 +3847,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0000",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Status",
     "content": "This document consolidates the current Markdown corpus into one implementation-ready specification for finger millet (ragi).\n\nIt resolves conflicts across:\n\n- legacy grading-only documents in `docs/prompts/model-doc/`\n- the newer `Claude MD file/` planning set\n- the newer moisture-risk architecture in `docs/specs/ai-grain-moisture/`",
     "tokens": [
@@ -3840,10 +3905,12 @@
     "section_level": 2,
     "tags": [
       "and",
+      "docs",
       "grade",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "status",
@@ -3853,7 +3920,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0001",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Canonical Scope",
     "content": "The system is a camera-assisted inspection workflow for finger millet only.\n\nIt has two separate but related outputs:\n\n- grain quality grade\n- moisture-risk estimate\n\nThis system is not:\n\n- a certified moisture meter\n- a regulatory certification engine\n- a generic all-crop classifier",
     "tokens": [
@@ -3908,10 +3975,12 @@
     "tags": [
       "and",
       "canonical",
+      "docs",
       "grade",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "scope",
       "spec",
@@ -3921,7 +3990,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0002",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Source Priority",
     "content": "When documents disagree, use this precedence:\n\n1. `docs/specs/ai-grain-moisture/AI_GRAIN_MOISTURE_MASTER_SPEC.md`\n2. `docs/specs/ai-grain-moisture/README.md`\n3. `docs/prompts/model-doc/grades_comparison.md`\n4. current implementation behavior in `legacy/model-doc-app/streamlit_grading_app.py`\n5. older grading-only docs in `docs/prompts/model-doc/finger_millet_ai_grading.md` and `docs/prompts/model-doc/Claude MD file/`",
     "tokens": [
@@ -3998,11 +4067,13 @@
     "section_level": 2,
     "tags": [
       "and",
+      "docs",
       "grade",
       "md",
       "moisture",
       "priority",
       "quality",
+      "rag",
       "ragi",
       "source",
       "spec",
@@ -4012,7 +4083,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0003",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Canonical Product Definition",
     "content": "The recommended product is a validation-first pipeline that:\n\n- guides the operator through controlled image capture\n- rejects invalid captures before inference\n- estimates quality grade from visible defects and contamination\n- estimates moisture risk from optical proxy signals\n- exposes calibrated moisture percentage only when calibration exists\n- records confidence, warning reasons, and audit metadata",
     "tokens": [
@@ -4079,11 +4150,13 @@
       "canonical",
       "confidence",
       "definition",
+      "docs",
       "grade",
       "md",
       "moisture",
       "product",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "thresholds",
@@ -4094,7 +4167,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0004",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Quality Output",
     "content": "Use a three-tier quality grade:\n\n- `A`: premium food grade\n- `B`: commercial food grade\n- `C`: processing-grade or low-quality catch-all\n\nDo not use a separate `D` grade in the active deployment.\n\nLegacy `D` behavior should be represented as:\n\n- `quality_grade: \"C\"`\n- `reject_recommended: true`\n- `reject_reasons: [...]`",
     "tokens": [
@@ -4152,11 +4225,13 @@
     "section_level": 3,
     "tags": [
       "and",
+      "docs",
       "grade",
       "md",
       "moisture",
       "output",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "unified",
@@ -4166,7 +4241,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0005",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Moisture Output",
     "content": "Treat moisture as a separate axis from quality.\n\nRecommended internal moisture-risk bands:\n\n- `LOW`: `<= 11.5%`\n- `MODERATE`: `> 11.5% and <= 13.0%`\n- `HIGH`: `> 13.0% and < 15.0%`\n- `CRITICAL`: `>= 15.0%`\n\nThese thresholds are provisional and must be recalibrated on measured ragi data.\n\nFor a simplified UI, `CRITICAL` may be rendered as `HIGH` plus a mandatory warning, but the model and backend should preserve the more specific state.",
     "tokens": [
@@ -4240,11 +4315,13 @@
     "section_level": 3,
     "tags": [
       "and",
+      "docs",
       "grade",
       "md",
       "moisture",
       "output",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "thresholds",
@@ -4254,7 +4331,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0006",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Input Contract",
     "content": "Each physical sample should contain:\n\n- crop: `finger_millet`\n- 6 raw images\n- 3 views x flash/no-flash pairs\n- capture metadata\n- validation report\n- optional measured moisture labels",
     "tokens": [
@@ -4290,10 +4367,12 @@
     "tags": [
       "and",
       "contract",
+      "docs",
       "input",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "unified",
@@ -4303,7 +4382,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0007",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Required 6-Image Capture Set",
     "content": "1. Top view, no flash\n2. Top view, flash\n3. Slight angle, no flash\n4. Slight angle, flash\n5. Lighting-variation view, no flash\n6. Lighting-variation view, flash",
     "tokens": [
@@ -4341,10 +4420,12 @@
     "tags": [
       "and",
       "capture",
+      "docs",
       "image",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "required",
       "set",
@@ -4355,7 +4436,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0008",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Required Capture Conditions",
     "content": "- distance about `20-25 cm`\n- top view near `90 degrees`\n- angled view about `15-25 degrees`\n- locked exposure\n- locked white balance\n- locked focus\n- locked zoom\n- visible calibration grid\n- visible white/gray reference patch\n- limited overlap and pile thickness",
     "tokens": [
@@ -4408,9 +4489,11 @@
       "and",
       "capture",
       "conditions",
+      "docs",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "required",
       "spec",
@@ -4422,7 +4505,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0009",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Required Metadata",
     "content": "At minimum:\n\n- `sample_id`\n- `crop`\n- `batch_id`\n- `device_model`\n- `view_type`\n- `flash_used`\n- `capture_distance_cm`\n- `calibration_grid_version`\n- `reference_patch_version`\n- temperature and humidity if available\n\nFor moisture training or calibration, also require:\n\n- repeated measured moisture readings\n- moisture measurement method\n- averaged ground-truth moisture\n- reading variability",
     "tokens": [
@@ -4481,10 +4564,12 @@
     "section_level": 3,
     "tags": [
       "and",
+      "docs",
       "md",
       "metadata",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "required",
       "spec",
@@ -4495,7 +4580,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0010",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "1. Capture and Validation",
     "content": "Reject before inference if any of the following occur:\n\n- unreadable file\n- screenshot or chat UI\n- missing grid\n- missing reference patch\n- severe blur\n- severe underexposure\n- severe overexposure\n- flash/no-flash misalignment\n- mixed crop content\n- excessive grain overlap",
     "tokens": [
@@ -4545,9 +4630,11 @@
     "tags": [
       "and",
       "capture",
+      "docs",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "unified",
@@ -4557,7 +4644,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0011",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "2. Preprocessing",
     "content": "Perform:\n\n- file decode and integrity checks\n- grid detection\n- scale estimation\n- perspective correction\n- reference patch normalization\n- LAB and HSV conversion\n- flash/no-flash alignment\n- pair difference map generation\n- stable crop-region extraction\n\nNever overwrite raw images.",
     "tokens": [
@@ -4603,10 +4690,12 @@
     "section_level": 3,
     "tags": [
       "and",
+      "docs",
       "md",
       "moisture",
       "preprocessing",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "unified"
@@ -4615,7 +4704,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0012",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "3. Segmentation",
     "content": "Estimate:\n\n- grain region\n- overlap and clumping\n- broken grain regions\n- foreign matter\n- dust/fines\n- segmentation confidence\n\nFor ragi, patch-level analysis is acceptable when per-grain segmentation is unstable.",
     "tokens": [
@@ -4655,9 +4744,11 @@
     "tags": [
       "and",
       "confidence",
+      "docs",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "safety",
       "segmentation",
@@ -4668,7 +4759,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0013",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "4. Feature Extraction",
     "content": "Use both learned and explicit features:\n\n- specular highlight ratio\n- flash/no-flash deltas\n- texture and entropy\n- LAB/HSV color statistics\n- clumping and density features\n- broken grain fraction\n- foreign matter fraction\n\nNo single visual feature should determine moisture or quality alone.",
     "tokens": [
@@ -4720,12 +4811,14 @@
     "section_level": 3,
     "tags": [
       "and",
+      "docs",
       "extraction",
       "feature",
       "grade",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "safety",
       "spec",
@@ -4735,7 +4828,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0014",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "5. Model Inference",
     "content": "Use a crop-specific hybrid model with:\n\n- shared lightweight vision encoder\n- flash/no-flash difference branch\n- handcrafted feature branch\n- metadata branch\n- fusion layer\n- uncertainty head\n\nRecommended outputs:\n\n- moisture regression head\n- moisture-risk classification head\n- quality grade head\n- broken grain head\n- foreign matter head\n- confidence head",
     "tokens": [
@@ -4793,12 +4886,14 @@
     "tags": [
       "and",
       "confidence",
+      "docs",
       "grade",
       "inference",
       "md",
       "model",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "safety",
       "spec",
@@ -4808,7 +4903,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0015",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "6. Calibration",
     "content": "Apply crop-specific calibration after raw model inference.\n\nCalibration must remain separate from base model weights when possible.\n\nDo not expose moisture percentage to users unless:\n\n- measured moisture labels exist\n- calibration has been fit\n- calibration metrics are acceptable",
     "tokens": [
@@ -4858,9 +4953,11 @@
     "tags": [
       "and",
       "calibration",
+      "docs",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "thresholds",
@@ -4870,7 +4967,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0016",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "7. Confidence and Decision Layer",
     "content": "Confidence should combine:\n\n- model confidence\n- image quality\n- cross-view consistency\n- flash/no-flash consistency\n- calibration confidence\n- metadata completeness\n- in-distribution score\n\nRecommended action policy:\n\n- high confidence: show full result\n- medium confidence: show result with caution\n- low confidence: recommend retake or meter confirmation\n- very low confidence: reject prediction\n- high-risk prediction with low confidence: still warn and require meter confirmation",
     "tokens": [
@@ -4945,11 +5042,13 @@
       "and",
       "confidence",
       "decision",
+      "docs",
       "grade",
       "layer",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "unified",
@@ -4959,7 +5058,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0017",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Canonical Quality Grading Logic",
     "content": "Use the following order of operations.",
     "tokens": [
@@ -4980,12 +5079,14 @@
     "tags": [
       "and",
       "canonical",
+      "docs",
       "grade",
       "grading",
       "logic",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "unified"
@@ -4994,7 +5095,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0018",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Hard Safety Gate",
     "content": "If any of the following are detected:\n\n- biological hazard\n- visible mold\n- webbing\n- insect damage\n- visible stones\n- foreign matter `> 3%`\n\nThen:\n\n- set `quality_grade = \"C\"`\n- set `reject_recommended = true`",
     "tokens": [
@@ -5034,12 +5135,14 @@
     "section_level": 3,
     "tags": [
       "and",
+      "docs",
       "gate",
       "grade",
       "hard",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "safety",
       "spec",
@@ -5050,7 +5153,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0019",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Grade A Rule",
     "content": "Assign `A` only if all are true:\n\n- off-tone grain fraction `< 5%`\n- size deviation `< 5%`\n- shape defect fraction `< 5%`\n- foreign matter `< 1%`\n- no biological hazards\n- no strong dullness or moisture clumping",
     "tokens": [
@@ -5091,10 +5194,12 @@
     "tags": [
       "a",
       "and",
+      "docs",
       "grade",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "rule",
       "safety",
@@ -5105,7 +5210,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0020",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Grade C Rule",
     "content": "Assign `C` if any are true and the hard safety gate did not already trigger:\n\n- clearly bimodal color distribution\n- off-tone fraction in roughly the `10-35%` range\n- size deviation roughly `15-30%`\n- shape defect fraction roughly `10-25%`\n- visible quality degradation inconsistent with Grade B",
     "tokens": [
@@ -5165,10 +5270,12 @@
     "tags": [
       "and",
       "c",
+      "docs",
       "grade",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "rule",
       "spec",
@@ -5179,7 +5286,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0021",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Grade B Rule",
     "content": "Assign `B` when the batch is not `A`, not safety-reject, and not clearly `C`.\n\nTypical B characteristics:\n\n- off-tone fraction around `5-10%`\n- minor size or shape variance\n- foreign matter around `1-3%`\n- no hazard signals",
     "tokens": [
@@ -5227,10 +5334,12 @@
     "tags": [
       "and",
       "b",
+      "docs",
       "grade",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "rule",
       "safety",
@@ -5242,7 +5351,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0022",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Recommended Quality Output Schema",
     "content": "```json\n{\n  \"quality_grade\": \"B\",\n  \"quality_score\": 78,\n  \"reject_recommended\": false,\n  \"reject_reasons\": [],\n  \"broken_grain_percent\": 3.2,\n  \"foreign_matter_percent\": 0.8,\n  \"uniformity_score\": 81,\n  \"mold_visible\": false\n}\n```",
     "tokens": [
@@ -5280,11 +5389,13 @@
     "section_level": 2,
     "tags": [
       "and",
+      "docs",
       "grade",
       "md",
       "moisture",
       "output",
       "quality",
+      "rag",
       "ragi",
       "recommended",
       "safety",
@@ -5298,7 +5409,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0023",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Recommended Moisture Output Schema",
     "content": "```json\n{\n  \"moisture_risk\": \"MODERATE\",\n  \"moisture_percent_estimate\": 12.6,\n  \"moisture_estimate_calibrated\": true,\n  \"confidence\": 78,\n  \"action\": \"dry_or_confirm_with_meter\"\n}\n```\n\nIf calibration is absent or confidence is too low, omit or suppress `moisture_percent_estimate`.",
     "tokens": [
@@ -5348,10 +5459,12 @@
     "tags": [
       "and",
       "confidence",
+      "docs",
       "md",
       "moisture",
       "output",
       "quality",
+      "rag",
       "ragi",
       "recommended",
       "schema",
@@ -5363,7 +5476,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0024",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Training Data Rules",
     "content": "- do not train on screenshots\n- do not use visual guesses as moisture labels\n- do not mix crops in the first production model\n- do not split by image only",
     "tokens": [
@@ -5405,9 +5518,11 @@
     "tags": [
       "and",
       "data",
+      "docs",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "rules",
       "spec",
@@ -5419,7 +5534,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0025",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Split Rules",
     "content": "Split by:\n\n- farm\n- batch\n- date\n- device\n\nDo not allow the same physical batch in both train and test.",
     "tokens": [
@@ -5449,9 +5564,11 @@
     "section_level": 3,
     "tags": [
       "and",
+      "docs",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "rules",
       "spec",
@@ -5463,7 +5580,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0026",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Minimum Dataset Targets",
     "content": "For ragi:\n\n- prototype: `500-1,000` measured samples\n- strong model: `5,000-10,000` measured samples\n- production: multi-region, multi-season, multi-device coverage",
     "tokens": [
@@ -5499,10 +5616,12 @@
     "tags": [
       "and",
       "dataset",
+      "docs",
       "md",
       "minimum",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "targets",
@@ -5513,7 +5632,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0027",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Metrics",
     "content": "Moisture regression:\n\n- MAE\n- RMSE\n- R2\n\nMoisture-risk classification:\n\n- precision\n- recall\n- F1\n- confusion matrix\n- false-safe rate\n\nQuality grading:\n\n- grade accuracy\n- macro F1\n- defect percentage error\n\nReliability:\n\n- expected calibration error\n- rejection rate\n- confidence versus accuracy\n\nOperational:\n\n- invalid image rate\n- retake rate\n- inference latency\n- meter-confirmation rate",
     "tokens": [
@@ -5570,11 +5689,13 @@
     "tags": [
       "and",
       "confidence",
+      "docs",
       "grade",
       "md",
       "metrics",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "thresholds",
@@ -5585,7 +5706,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0028",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Current Known Limitations",
     "content": "- RGB images observe moisture proxies, not internal moisture directly.\n- The current screenshot-heavy image folder is not a valid training dataset.\n- Quality grading thresholds are more mature than moisture estimation thresholds.\n- Device shift and lighting shift remain major risks until calibration data exists.\n- The active codebase implements quality grading only; moisture-risk architecture is specified but not yet fully realized in the current Streamlit grader.",
     "tokens": [
@@ -5664,12 +5785,14 @@
     "tags": [
       "and",
       "current",
+      "docs",
       "grade",
       "known",
       "limitations",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "thresholds",
@@ -5681,7 +5804,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0029",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Legacy Migration Notes",
     "content": "Use these normalization rules when converting older docs into implementation work:\n\n- replace legacy `Grade D` with `quality_grade = \"C\"` plus `reject_recommended = true`\n- treat `grades_comparison.md` as the authoritative grade-boundary table\n- treat the moisture master spec as the authoritative system architecture\n- treat empty placeholder files as incomplete and non-authoritative\n- treat `Gemma 4` references as planning-era model guidance, not proof of the current runtime",
     "tokens": [
@@ -5759,6 +5882,7 @@
     "section_level": 2,
     "tags": [
       "and",
+      "docs",
       "grade",
       "legacy",
       "md",
@@ -5766,6 +5890,7 @@
       "moisture",
       "notes",
       "quality",
+      "rag",
       "ragi",
       "spec",
       "unified",
@@ -5775,7 +5900,7 @@
   },
   {
     "id": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC_0030",
-    "source": "UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
     "title": "Final Guidance",
     "content": "This project should be implemented as a controlled, auditable ragi inspection workflow.\n\nThe correct near-term milestone is not a larger model. It is:\n\n- valid measured data\n- deterministic validation\n- calibration-ready preprocessing\n- conservative confidence logic\n- explicit separation of moisture risk from quality grade",
     "tokens": [
@@ -5831,12 +5956,14 @@
     "tags": [
       "and",
       "confidence",
+      "docs",
       "final",
       "grade",
       "guidance",
       "md",
       "moisture",
       "quality",
+      "rag",
       "ragi",
       "safety",
       "spec",

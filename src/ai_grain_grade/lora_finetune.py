@@ -3,14 +3,14 @@ Qwen3-VL QLoRA Fine-Tuning for Ragi Grain Grading
 =================================================
 
 Standalone PEFT trainer for local active-learning loops:
-  - Reads human-corrected JSON feedback from feedback_data/
+  - Reads human-corrected JSON feedback from data/feedback/feedback_data/
   - Supports records with embedded base64 images or image_path fallbacks
   - Fine-tunes Qwen3-VL with 4-bit BitsAndBytes + LoRA attention adapters
   - Applies asymmetric food-safety loss for false-safe moisture predictions
   - Saves LoRA adapters to models/qwen_grain_lora_latest/
 
 This file also keeps FeedbackCollector and GradingFeedbackItem compatible with
-app.py, which imports them for Streamlit feedback capture.
+app.py, which launches the packaged Streamlit feedback capture app.
 """
 
 from __future__ import annotations
@@ -40,6 +40,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+DEFAULT_FEEDBACK_DIR = Path(__file__).resolve().parents[2] / "data" / "feedback" / "feedback_data"
 
 
 MOISTURE_ORDER = {"LOW": 0, "MODERATE": 1, "HIGH": 2, "CRITICAL": 3}
@@ -238,7 +240,7 @@ def load_feedback_examples(feedback_dir: Path, require_image: bool = True) -> Li
 
     The loader accepts both the requested embedded-base64 schema and the current
     Streamlit schema, where JSON stores image_path and labels while images live
-    under feedback_data/session_uploads/.
+    under data/feedback/feedback_data/session_uploads/.
     """
     examples: List[VisionFeedbackExample] = []
     feedback_files = sorted(feedback_dir.glob("*.json"))
@@ -808,7 +810,7 @@ RagiLoRAFinetuner = QwenGrainLoRATrainer
 class FeedbackCollector:
     """Storage and retrieval helper used by the Streamlit feedback UI."""
 
-    def __init__(self, storage_path: str = "./feedback_data"):
+    def __init__(self, storage_path: str | Path = DEFAULT_FEEDBACK_DIR):
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
@@ -972,7 +974,7 @@ def continuous_train(args: argparse.Namespace) -> None:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Qwen3-VL QLoRA trainer for ragi grading feedback.")
-    parser.add_argument("--feedback-dir", default="feedback_data")
+    parser.add_argument("--feedback-dir", default=str(DEFAULT_FEEDBACK_DIR))
     parser.add_argument("--output-dir", default="models/qwen_grain_lora_latest")
     parser.add_argument("--model-name", default="Qwen/Qwen3-VL-8B-Instruct")
     parser.add_argument("--epochs", type=int, default=1)

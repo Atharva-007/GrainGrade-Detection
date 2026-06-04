@@ -31,10 +31,11 @@ from pathlib import Path
 from PIL import Image
 
 # Our modules
-from rag_engine import RAGEngine
-from moisture_calibration import MoistureCalibrator
-from lora_finetune import FeedbackCollector
-from rule_engine import RagiRuleEngine
+from .paths import FEEDBACK_DIR, RAG_INDEX_PATH
+from .rag_engine import RAGEngine
+from .moisture_calibration import MoistureCalibrator
+from .lora_finetune import FeedbackCollector
+from .rule_engine import RagiRuleEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ class VisionRAGPipeline:
         vector_db_key: Optional[str] = None,
         use_ollama: bool = False,
         ollama_url: str = "http://localhost:11434/v1",
-        feedback_storage_path: str = "./feedback_data",
+        feedback_storage_path: Optional[str] = None,
         local_vlm_enabled: bool = False,
         rag_retrieval_mode: str = "embedding",
         qwen_provider: Optional[str] = None,
@@ -240,10 +241,12 @@ class VisionRAGPipeline:
 
         # Initialize RAG Engine
         self.rag_engine = RAGEngine(
-            index_path="./rag_index.json",
+            index_path=str(RAG_INDEX_PATH),
             retrieval_mode=rag_retrieval_mode,
         )
-        self.feedback_collector = FeedbackCollector(storage_path=feedback_storage_path)
+        self.feedback_collector = FeedbackCollector(
+            storage_path=str(feedback_storage_path or FEEDBACK_DIR)
+        )
         
         # Initial indexing if empty or outdated
         if not self.rag_engine.chunks or self.rag_engine.needs_rebuild():

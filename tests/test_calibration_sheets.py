@@ -2,10 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from physics_proxies import PhysicsProxiesExtractor
+from ai_grain_grade.physics_proxies import PhysicsProxiesExtractor
 
 
-FIXTURE_DIR = Path("calibration sheet example")
+FIXTURE_DIR = Path("examples") / "calibration-sheets"
 
 
 def _require_fixture(name: str) -> Path:
@@ -17,7 +17,7 @@ def _require_fixture(name: str) -> Path:
 
 def test_precision_sheet_uses_100mm_active_zone():
     extractor = PhysicsProxiesExtractor()
-    result = extractor.extract_all_proxies(str(_require_fixture("Sheet 1.jpeg")))
+    result = extractor.extract_all_proxies(str(_require_fixture("sheet-1.jpeg")))
 
     calibration = result["calibration"]
     assert calibration["available"] is True
@@ -36,7 +36,7 @@ def test_precision_sheet_uses_100mm_active_zone():
 
 def test_blue_grading_sheet_uses_aruco_blue_grid():
     extractor = PhysicsProxiesExtractor()
-    result = extractor.extract_all_proxies(str(_require_fixture("Sheet 2.jpeg")))
+    result = extractor.extract_all_proxies(str(_require_fixture("sheet-2.jpeg")))
 
     calibration = result["calibration"]
     assert calibration["available"] is True
@@ -51,7 +51,7 @@ def test_blue_grading_sheet_uses_aruco_blue_grid():
 def test_grain_example_crops_to_printed_active_zone():
     extractor = PhysicsProxiesExtractor()
     result = extractor.extract_all_proxies(
-        str(_require_fixture("Callibration garin garde example .jpeg"))
+        str(_require_fixture("grain-grade-calibration-example.jpeg"))
     )
 
     calibration = result["calibration"]

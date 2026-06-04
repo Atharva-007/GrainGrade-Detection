@@ -33,6 +33,8 @@ OVERLAP_CHARS = 180
 INDEX_VERSION = 2
 EMBEDDING_INDEX_VERSION = 1
 EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
+DEFAULT_INDEX_PATH = Path(__file__).resolve().parents[2] / "data" / "rag" / "rag_index.json"
+DEFAULT_DOCS_DIR = Path(__file__).resolve().parents[2] / "docs" / "rag"
 
 
 def _norm_path(path: str | Path) -> str:
@@ -42,13 +44,14 @@ def _norm_path(path: str | Path) -> str:
 class RAGEngine:
     def __init__(
         self,
-        index_path: str = "./rag_index.json",
+        index_path: str | Path = DEFAULT_INDEX_PATH,
         retrieval_mode: str = "lexical",
         embedding_model_name: str = EMBEDDING_MODEL_NAME,
         embedding_index_path: Optional[str] = None,
     ):
         self.index_path = Path(index_path)
-        self.repo_root = self.index_path.resolve().parent
+        self.repo_root = Path(__file__).resolve().parents[2]
+        self.docs_dir = DEFAULT_DOCS_DIR
         self.retrieval_mode = retrieval_mode.lower().strip()
         self.embedding_model_name = embedding_model_name
         self.embedding_index_path = (
@@ -120,9 +123,9 @@ class RAGEngine:
         )
 
     def discover_documents(self) -> List[Path]:
-        """Discover the canonical root Markdown sources for retrieval."""
+        """Discover the canonical Markdown sources for retrieval."""
         return [
-            self.repo_root / filename
+            self.docs_dir / filename
             for filename in (
                 "FAO_BIS_RAGI_RULES.md",
                 "AUTHORIZED_RAGI_DATA_SOURCES.md",
@@ -134,10 +137,10 @@ class RAGEngine:
     def _is_retrieval_document(self, path: Path) -> bool:
         norm = _norm_path(path.relative_to(self.repo_root))
         if norm in {
-            "unified_ragi_quality_and_moisture_spec.md",
-            "architecture.md",
-            "fao_bis_ragi_rules.md",
-            "authorized_ragi_data_sources.md",
+            "docs/rag/unified_ragi_quality_and_moisture_spec.md",
+            "docs/rag/architecture.md",
+            "docs/rag/fao_bis_ragi_rules.md",
+            "docs/rag/authorized_ragi_data_sources.md",
         }:
             return True
         return False

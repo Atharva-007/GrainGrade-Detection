@@ -2,7 +2,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from vision_rag_pipeline import VisionRAGPipeline
+from ai_grain_grade.vision_rag_pipeline import VisionRAGPipeline
 
 
 class _FakeResponse:
@@ -52,7 +52,7 @@ def test_dashscope_provider_uses_openai_compatible_vision_payload(tmp_path, monk
                 }
             )
 
-    monkeypatch.setattr("vision_rag_pipeline.httpx.Client", FakeClient)
+    monkeypatch.setattr("ai_grain_grade.vision_rag_pipeline.httpx.Client", FakeClient)
     image_path = _write_test_image(tmp_path / "sample.jpg")
     pipeline = VisionRAGPipeline(
         qwen_provider="dashscope",
@@ -110,7 +110,7 @@ def test_text_repair_uses_configured_cloud_provider(tmp_path, monkeypatch):
                 }
             )
 
-    monkeypatch.setattr("vision_rag_pipeline.httpx.Client", FakeClient)
+    monkeypatch.setattr("ai_grain_grade.vision_rag_pipeline.httpx.Client", FakeClient)
     pipeline = VisionRAGPipeline(
         qwen_provider="dashscope",
         qwen_model="qwen3-vl-plus",
@@ -139,4 +139,3 @@ def test_dashscope_provider_defaults_to_qwen3_vl_model(tmp_path):
 
     assert pipeline.qwen_model == "qwen3-vl-plus"
     assert pipeline.qwen_provider == "dashscope"
-

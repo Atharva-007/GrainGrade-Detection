@@ -54,7 +54,8 @@ fi
 
 # 5. Create data directories
 echo "📁 Setting up data directories..."
-mkdir -p feedback_data
+mkdir -p data/feedback/feedback_data
+mkdir -p data/rag
 mkdir -p models
 mkdir -p results
 mkdir -p logs
@@ -62,8 +63,8 @@ echo "✓ Directories created"
 
 # 6. Download/setup RAG knowledge base
 echo "📚 Setting up RAG knowledge base..."
-if [ ! -f "rag_chunks.json" ]; then
-    cat > rag_chunks.json << 'EOF'
+if [ ! -f "data/rag/rag_chunks.json" ]; then
+    cat > data/rag/rag_chunks.json << 'EOF'
 {
   "chunks": [
     {
@@ -94,7 +95,7 @@ if [ ! -f "rag_chunks.json" ]; then
   ]
 }
 EOF
-    echo "✓ Created rag_chunks.json"
+    echo "✓ Created data/rag/rag_chunks.json"
 fi
 
 # 7. Test imports

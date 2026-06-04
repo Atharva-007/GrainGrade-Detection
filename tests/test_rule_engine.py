@@ -1,4 +1,4 @@
-from rule_engine import RagiRuleEngine
+from ai_grain_grade.rule_engine import RagiRuleEngine
 
 
 BASE_PROXIES = {

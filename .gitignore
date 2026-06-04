@@ -5,12 +5,25 @@ __pycache__/
 __MACOSX/
 .dist/
 *.log
+.pytest_cache/
+.streamlit-run*.log
+.streamlit-run*.out.log
+.streamlit-run*.err.log
+streamlit-*.log
+streamlit-*.out.log
+streamlit-*.err.log
+streamlit-app.log
+streamlit-app.err.log
+*.pid
 .hf-cache/
 .tmp_streamlit_test/
+tmp*/
 tmp2a5sfseq/
 tmp81f78zpr/
 tmpl7imlqgf/
-feedback_data/session_uploads/
+data/feedback/feedback_data/session_uploads/
 graphify-out/cache/
+supabase/.temp/
+models/
 # Added by code-review-graph
 .code-review-graph/
