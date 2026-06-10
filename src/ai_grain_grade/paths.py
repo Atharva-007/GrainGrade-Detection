@@ -9,7 +9,10 @@ PROJECT_ROOT = PACKAGE_ROOT.parents[1]
 
 DATA_DIR = PROJECT_ROOT / "data"
 RAG_DATA_DIR = DATA_DIR / "rag"
+DATASET_MANIFEST_DIR = DATA_DIR / "dataset_manifests"
 RAG_INDEX_PATH = RAG_DATA_DIR / "rag_index.json"
+
+DEFAULT_CROP_DATASET_MANIFEST_PATH = DATASET_MANIFEST_DIR / "crop_dataset_manifest.json"
 
 FEEDBACK_DIR = DATA_DIR / "feedback" / "feedback_data"
 SESSION_UPLOADS_DIR = FEEDBACK_DIR / "session_uploads"
@@ -24,3 +27,4 @@ def ensure_runtime_dirs() -> None:
     FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
     SESSION_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     RAG_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DATASET_MANIFEST_DIR.mkdir(parents=True, exist_ok=True)

@@ -16,5 +16,6 @@ The RAG engine reads these files from `rag/`:
 - `rag/AUTHORIZED_RAGI_DATA_SOURCES.md`
 - `rag/ARCHITECTURE.md`
 - `rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md`
+- `rag/crop_knowledge/**/*` when available
 
 Do not move those four files without updating `src/ai_grain_grade/rag_engine.py` and rebuilding `data/rag/rag_index.json`.

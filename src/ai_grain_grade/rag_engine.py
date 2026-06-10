@@ -26,6 +26,8 @@ OVERLAP_CHARS = 180
 INDEX_VERSION = 2
 DEFAULT_INDEX_PATH = Path(__file__).resolve().parents[2] / "data" / "rag" / "rag_index.json"
 DEFAULT_DOCS_DIR = Path(__file__).resolve().parents[2] / "docs" / "rag"
+CROP_KNOWLEDGE_DIR = DEFAULT_DOCS_DIR / "crop_knowledge"
+CROP_KNOWLEDGE_EXTENSIONS = {".md", ".markdown", ".yaml", ".yml"}
 
 
 def _norm_path(path: str | Path) -> str:
@@ -41,6 +43,7 @@ class RAGEngine:
         self.index_path = Path(index_path)
         self.repo_root = Path(__file__).resolve().parents[2]
         self.docs_dir = DEFAULT_DOCS_DIR
+        self.crop_docs_dir = CROP_KNOWLEDGE_DIR
         self.retrieval_mode = "lexical"
         if retrieval_mode.lower().strip() != "lexical":
             logger.warning("Only lexical RAG is supported in the cloud-only build.")
@@ -104,7 +107,7 @@ class RAGEngine:
 
     def discover_documents(self) -> List[Path]:
         """Discover the canonical Markdown sources for retrieval."""
-        return [
+        canonical = [
             self.docs_dir / filename
             for filename in (
                 "FAO_BIS_RAGI_RULES.md",
@@ -114,6 +117,26 @@ class RAGEngine:
             )
         ]
 
+        ordered_paths: List[Path] = [*canonical]
+        if self.crop_docs_dir.exists():
+            for candidate in sorted(self.crop_docs_dir.rglob("*"), key=lambda item: str(item).lower()):
+                if not candidate.is_file():
+                    continue
+                if candidate.suffix.lower() not in CROP_KNOWLEDGE_EXTENSIONS and candidate.suffix != "":
+                    continue
+                ordered_paths.append(candidate)
+
+        # Keep deterministic order while deduplicating path aliases.
+        deduped: List[Path] = []
+        seen: set[str] = set()
+        for path in ordered_paths:
+            key = str(path.resolve()).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(path)
+        return deduped
+
     def _is_retrieval_document(self, path: Path) -> bool:
         norm = _norm_path(path.relative_to(self.repo_root))
         if norm in {
@@ -122,6 +145,8 @@ class RAGEngine:
             "docs/rag/fao_bis_ragi_rules.md",
             "docs/rag/authorized_ragi_data_sources.md",
         }:
+            return True
+        if norm.startswith("docs/rag/crop_knowledge/"):
             return True
         return False
 
@@ -241,6 +266,10 @@ class RAGEngine:
             ("unified_ragi_quality_and_moisture_spec.md", 5.0),
             ("architecture.md", 4.0),
         ]
+        if "/crop_knowledge/" in f"/{norm}":
+            if "grading_rules" in norm:
+                return 4.5
+            return 3.5
         for pattern, priority in priority_rules:
             if pattern in norm:
                 return priority

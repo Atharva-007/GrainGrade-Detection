@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from numbers import Real
 from pathlib import Path
@@ -32,6 +32,10 @@ class GradingFeedbackItem:
     device_model: str
     batch_id: str = ""
     notes: str = ""
+    selected_crop: str = ""
+    selected_crop_confidence: float = 0.0
+    selection_source: str = ""
+    applied_rules: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def flatten_feature_dict(data: Dict[str, Any], prefix: str = "") -> Dict[str, float]:

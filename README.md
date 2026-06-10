@@ -111,19 +111,41 @@ The active app reads these Qwen variables:
 - `QWEN_VL_BASE_URL` - optional OpenAI-compatible base URL override.
 - `QWEN_VL_MODEL` - optional model override.
 - `QWEN_VL_TIMEOUT_SECONDS` - optional cloud request timeout.
+- `CROP_MODEL_ROUTES` - optional JSON map for crop-specific routing
+  (for example `{"rice":{"provider":"dashscope","model":"qwen3-vl-plus"}}`).
+- `CROP_MODEL_ROUTES_PATH` - optional file path containing the same crop route map.
+
+When a crop has a dedicated entry, that route is used for inference first; otherwise
+the app uses the default Qwen configuration.
 
 Secrets belong in `.env`; `.env` and `*.env` are ignored by git.
 
 ## RAG Knowledge Sources
 
-The local RAG index intentionally reads these Markdown files from `docs/rag/`:
+The local RAG index reads:
 
 - `docs/rag/FAO_BIS_RAGI_RULES.md`
 - `docs/rag/AUTHORIZED_RAGI_DATA_SOURCES.md`
 - `docs/rag/ARCHITECTURE.md`
 - `docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md`
+- `docs/rag/crop_knowledge/**/*` (crop reference and grading rules, when present)
 
 The chunk index lives at `data/rag/rag_index.json`.
+
+## Dataset manifest and training artifacts
+
+Use `scripts/build_crop_dataset_manifest.py` to generate a deterministic crop dataset
+manifest and export optional per-crop `train` / `val` JSONL files for later Qwen tuning jobs:
+
+```powershell
+python scripts/build_crop_dataset_manifest.py --emit-training-dir data/dataset_manifests/training
+```
+
+Optional quality filtering supports deterministic exports:
+
+```powershell
+python scripts/build_crop_dataset_manifest.py --emit-training-dir data/dataset_manifests/training --require-quality-flags flat_archive_path --exclude-quality-flags missing_label
+```
 
 ## Tests
 

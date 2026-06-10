@@ -76,6 +76,34 @@ def _is_local_base_url(url: str) -> bool:
     return any(marker in text for marker in ("localhost", "127.0.0.1", "0.0.0.0", "[::1]", "::1"))
 
 
+def _load_crop_route_map() -> Dict[str, Any]:
+    inline_map = os.getenv("CROP_MODEL_ROUTES", "").strip()
+    if inline_map:
+        try:
+            parsed = json.loads(inline_map)
+            if isinstance(parsed, dict):
+                return parsed
+            logger.warning("CROP_MODEL_ROUTES must be a JSON object; ignoring invalid payload.")
+        except Exception as exc:
+            logger.warning("Failed to parse CROP_MODEL_ROUTES: %s", exc)
+
+    routes_path = os.getenv("CROP_MODEL_ROUTES_PATH", "").strip()
+    if routes_path:
+        try:
+            route_path = Path(routes_path)
+            if route_path.exists():
+                payload = json.loads(route_path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+                logger.warning("Crop route file %s must contain a JSON object.", route_path)
+            else:
+                logger.warning("Crop route file not found: %s", route_path)
+        except Exception as exc:
+            logger.warning("Failed to load CROP_MODEL_ROUTES_PATH=%s: %s", routes_path, exc)
+
+    return {}
+
+
 def _qwen_runtime_config() -> Dict[str, Any]:
     requested_provider = os.getenv("QWEN_VL_PROVIDER", DEFAULT_QWEN_PROVIDER).strip().lower()
     provider = requested_provider if requested_provider in CLOUD_QWEN_PROVIDERS else DEFAULT_QWEN_PROVIDER
@@ -117,11 +145,13 @@ def _qwen_runtime_config() -> Dict[str, Any]:
         "provider_warning": provider_warning,
         "local_url_blocked": local_url_blocked,
         "label": f"{provider}/{model}",
+        "crop_model_routes": _load_crop_route_map(),
+        "crop_model_routes_path": os.getenv("CROP_MODEL_ROUTES_PATH", "").strip(),
     }
 
 st.set_page_config(
     page_title="Millets Now - Ragi Grading",
-    page_icon="🌾",
+    page_icon="\U0001F33E",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -3767,12 +3797,12 @@ def render_cyber_header(status: Dict[str, Any], show_trace: bool):
                     <div class="brand-id">MILLETS NOW</div>
                     <div class="mission-status">
                         <div class="status-dot"></div>
-                        {html.escape(status['runtime_label'])} · {status['chunk_count']} rules
+                        {html.escape(status['runtime_label'])}  |  {status['chunk_count']} rules
                     </div>
                 </div>
                 <div class="header-meta">
                     <div style="font-size: 0.76rem; color: var(--app-muted);">
-                        {html.escape(provider_text)} · rule RAG
+                        {html.escape(provider_text)}  |  rule RAG
                     </div>
                     <div class="trace-btn">{"Workflow open" if show_trace else "Workflow ready"}</div>
                 </div>
@@ -3828,46 +3858,6 @@ def render_section_intro(eyebrow: str, title: str, copy: str):
     )
 
 
-def _decision_state(grading_result, confidence_threshold: int) -> Dict[str, str]:
-    if grading_result.reject_recommended:
-        return {"label": "HOLD_BATCH", "color": "#ff5252", "note": "Do not release this lot."}
-    if grading_result.moisture_risk in {MoistureRisk.HIGH, MoistureRisk.CRITICAL}:
-        return {"label": "DRY_RECHECK", "color": "#ffd740", "note": "Moisture levels exceed safety guardrails."}
-    if grading_result.overall_confidence < confidence_threshold:
-        return {"label": "OPERATOR_REVIEW", "color": "#ffd740", "note": "Confidence level below threshold."}
-    return {"label": "RELEASE_READY", "color": "#00ff41", "note": "Lot within acceptable parameters."}
-
-
-def render_result_banner(grading_result, confidence_threshold: int):
-    state = _decision_state(grading_result, confidence_threshold)
-    grade = grading_result.quality_grade.value
-    st.markdown(
-        f"""
-        <div class="result-banner">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                    <div style="color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;">DECISION_OUTPUT</div>
-                    <div style="color: {state['color']}; font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 800;">{state['label']}</div>
-                    <div class="decision-title" style="color: {state['color']};">GRADE_{grade}</div>
-                    <div style="color: var(--text); font-size: 1.1rem; margin-top: 1rem; max-width: 600px;">{grading_result.operator_summary}</div>
-                </div>
-                <div style="text-align: right;">
-                    <div style="color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;">CONFIDENCE</div>
-                    <div style="color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 3rem; font-weight: 800;">{grading_result.overall_confidence}%</div>
-                </div>
-            </div>
-            <div style="margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
-                <div style="color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; margin-bottom: 0.5rem;">CRITICAL_SIGNALS</div>
-                <ul style="color: var(--muted); font-size: 0.85rem; padding-left: 1.2rem;">
-                    {"".join(f"<li>{html.escape(s)}</li>" for s in grading_result.signal_highlights)}
-                </ul>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 @st.cache_resource
 def init_local_stack():
     """Initialize the physics extractor and configured cloud Qwen runtime."""
@@ -3882,6 +3872,8 @@ def init_local_stack():
         qwen_model=qwen_cfg["model"],
         qwen_base_url=qwen_cfg["base_url"],
         qwen_api_key=qwen_cfg["api_key"],
+        crop_model_routes=qwen_cfg["crop_model_routes"],
+        crop_model_routes_path=qwen_cfg["crop_model_routes_path"],
         vector_db_type="local",
         rag_retrieval_mode="lexical",
     )
@@ -3919,6 +3911,7 @@ def get_runtime_status() -> Dict[str, Any]:
         "runtime_label": "Offline",
         "runtime_detail": "Cloud Qwen-VL runtime is not configured.",
         "chunk_count": _load_rag_chunk_count(),
+        "crop_route_count": len(qwen_cfg.get("crop_model_routes") or {}),
         "provider": qwen_cfg["provider"],
         "model": qwen_cfg["model"],
         "provider_label": qwen_cfg["label"],
@@ -4864,21 +4857,21 @@ def render_hero(status: Dict[str, Any], pending_feedback: int):
     st.markdown(
         f"""
         <div class="app-hero">
-            <div class="hero-eyebrow">Millets Now • Ragi Lot Grader</div>
+            <div class="hero-eyebrow">Millets Now   |   Ragi Lot Grader</div>
             <div class="hero-title">{hero_title}</div>
             <div class="hero-body">
                 Upload one photo. The engine checks grade, moisture risk, and the next action with local rule retrieval and operator feedback.
                 <div class="hero-mini">Compact workflow: one image in, one decision out, corrections reused automatically.</div>
             </div>
             <div class="pill-row">
-                <div class="status-pill {runtime_class}">● Runtime: {html.escape(status['runtime_label'])}</div>
-                <div class="status-pill">◌ Rules: {status['chunk_count']}</div>
-                <div class="status-pill">◌ Corrections: {pending_feedback}</div>
+                <div class="status-pill {runtime_class}">Runtime: {html.escape(status['runtime_label'])}</div>
+                <div class="status-pill">Rules: {status['chunk_count']}</div>
+                <div class="status-pill">Corrections: {pending_feedback}</div>
             </div>
             <div class="hero-grid">
                 <div class="hero-stat">
                     <div class="hero-stat-label">Flow</div>
-                    <div class="hero-stat-value">Inspect → Decide</div>
+                    <div class="hero-stat-value">Inspect -> Decide</div>
                 </div>
                 <div class="hero-stat">
                     <div class="hero-stat-label">Model</div>
@@ -4933,6 +4926,44 @@ def _decision_state(grading_result, confidence_threshold: int) -> Dict[str, str]
     }
 
 
+def _format_crop_label(crop_value: Optional[str]) -> str:
+    if not crop_value:
+        return "Unknown"
+    crop = str(crop_value).replace("_", " ").replace("-", " ").strip()
+    return crop.title() if crop else "Unknown"
+
+
+def _format_crop_confidence(crop_confidence: Any) -> str:
+    try:
+        value = float(crop_confidence)
+    except (TypeError, ValueError):
+        return "Unknown"
+    value = max(0.0, min(1.0, value / 100.0 if value > 1.0 else value))
+    return f"{value:.0%}"
+
+
+def _confidence_tier(confidence: Any) -> str:
+    try:
+        score = int(float(confidence))
+    except (TypeError, ValueError):
+        return "unknown"
+    if score >= 85:
+        return "High"
+    if score >= 65:
+        return "Medium"
+    return "Low"
+
+
+def _format_rule_source(source_file: Any) -> str:
+    source = str(source_file or "").strip()
+    if not source:
+        return "no source"
+    if source.startswith(("https://", "http://")):
+        escaped = html.escape(source)
+        return f'<a href="{escaped}" target="_blank" rel="noopener">{escaped}</a>'
+    return html.escape(source)
+
+
 def render_result_banner(grading_result, confidence_threshold: int):
     grade_val = grading_result.quality_grade.value
     grade_class = "grade-a" if grade_val == "A" else "grade-b" if grade_val == "B" else "grade-c"
@@ -4945,10 +4976,29 @@ def render_result_banner(grading_result, confidence_threshold: int):
     }.get(moisture_val, "")
     state = _decision_state(grading_result, confidence_threshold)
     summary = grading_result.operator_summary or state["note"]
+    selected_crop = _format_crop_label(grading_result.selected_crop)
+    selected_crop_confidence = _format_crop_confidence(grading_result.selected_crop_confidence)
+    selection_source = str(grading_result.selection_source or "default")
+    route_provider = str(grading_result.route_provider or "").strip()
+    route_model = str(grading_result.route_model or "").strip()
+    route_attempts = ", ".join(str(item) for item in (grading_result.route_attempts or []))
     highlights = "".join(
         f'<li>{html.escape(item)}</li>'
         for item in grading_result.signal_highlights[:4]
     )
+    applied_rules = grading_result.applied_rules or []
+    if not applied_rules:
+        rule_list_html = "<li>No rule evidence was persisted with this result.</li>"
+    else:
+        rule_list_html = "".join(
+            f'<li><strong>{html.escape(str(rule.get("rule_name") or rule.get("rule_id") or "Rule"))}</strong> '
+            f'({html.escape(str(rule.get("rule_id") or "policy")}) -> '
+            f'<em>{_format_rule_source(rule.get("source_file"))}</em>'
+            f' - {_format_crop_confidence(rule.get("rule_confidence"))} confidence: '
+            f'{html.escape(str(rule.get("evidence") or "No evidence text provided"))}</li>'
+            for rule in applied_rules[:3]
+        )
+    confidence_tier = _confidence_tier(grading_result.overall_confidence)
     st.markdown(
         f"""
         <div class="result-banner">
@@ -4958,23 +5008,39 @@ def render_result_banner(grading_result, confidence_threshold: int):
                         <div class="decision-state {state['css']}">{html.escape(state['label'])}</div>
                         <div class="decision-confidence">{grading_result.overall_confidence}% confidence</div>
                     </div>
-                    <p class="decision-grade {grade_class}">Grade {grade_val} · {grading_result.quality_score}/100</p>
+                    <p class="decision-grade {grade_class}">Grade {grade_val}  |  {grading_result.quality_score}/100</p>
                     <div class="decision-note">{html.escape(summary)}</div>
+                    <div style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:0.4rem;">
+                        <span class="utility-chip" style="margin-right:0.35rem;">Crop: {html.escape(selected_crop)}</span>
+                        <span class="utility-chip" style="margin-right:0.35rem;">Source: {html.escape(selection_source)}</span>
+                        <span class="utility-chip" style="margin-right:0.35rem;">Crop confidence: {selected_crop_confidence}</span>
+                        <span class="utility-chip" style="margin-right:0.35rem;">Route: {html.escape(grading_result.route_label)}</span>
+                        <span class="utility-chip" style="margin-right:0.35rem;">Model: {html.escape(route_provider)} / {html.escape(route_model)}</span>
+                        <span class="utility-chip" style="margin-right:0.35rem;">Fallback: {'Yes' if grading_result.route_fallback_used else 'No'}</span>
+                    </div>
+                    <div class="utility-chip" style="margin-top:0.35rem; display:inline-flex; max-width:100%;">
+                        <span>Route attempts: {html.escape(route_attempts or 'none')}</span>
+                    </div>
+                    <ul class="compact-list">{highlights}</ul>
                 </div>
                 <div class="decision-card">
                     <div class="section-eyebrow">Storage</div>
                     <h4>Moisture action</h4>
                     <p><span class="{moisture_class}">{html.escape(moisture_val)}</span> moisture risk</p>
-                    <p>{grading_result.overall_confidence}% confidence · {grading_result.rag_chunks_used} rule chunks · {'fast rules' if is_fast_rules else 'vision assisted'}</p>
+                    <p>{grading_result.overall_confidence}% confidence  |  {grading_result.rag_chunks_used} rule chunks</p>
                 </div>
             </div>
-            <ul class="compact-list">{highlights}</ul>
+            <div style="margin: 1rem 0 0.55rem; color: var(--muted);">
+                <div class="section-eyebrow">Why this result</div>
+                <ul class="compact-list">{rule_list_html}</ul>
+            </div>
+            <div style="margin-top:0.4rem; color: var(--muted); font-size: 0.78rem;">
+                Confidence: High (>=85), Medium (65-84), Low (<65). Current <strong>{confidence_tier}</strong>.
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-
 def render_capture_tips():
     st.markdown(
         """
@@ -5081,14 +5147,14 @@ def render_signal_summary(proxies: Dict[str, Any]):
         grid_caption = ""
         if active_grid:
             grid_caption = (
-                f" · grid cells {int(active_grid.get('major_occupied_cells') or 0)}/"
+                f"  |  grid cells {int(active_grid.get('major_occupied_cells') or 0)}/"
                 f"{int(active_grid.get('major_total_cells') or 0)}"
             )
         calibration_caption = (
-            f"{float(calibration.get('pixels_per_mm') or 0.0):.2f} px/mm · "
-            f"{float(calibration.get('mm_per_pixel') or 0.0):.4f} mm/px · "
-            f"{float(calibrated_geometry.get('median_equiv_diameter_mm') or 0.0):.2f} mm grain · "
-            f"{html.escape(str(sheet_style))} · {html.escape(str(calibration_reference))}"
+            f"{float(calibration.get('pixels_per_mm') or 0.0):.2f} px/mm  |  "
+            f"{float(calibration.get('mm_per_pixel') or 0.0):.4f} mm/px  |  "
+            f"{float(calibrated_geometry.get('median_equiv_diameter_mm') or 0.0):.2f} mm grain  |  "
+            f"{html.escape(str(sheet_style))}  |  {html.escape(str(calibration_reference))}"
             f"{html.escape(grid_caption)}"
         )
     else:
@@ -5125,8 +5191,8 @@ def render_signal_summary(proxies: Dict[str, Any]):
                 <h4>Grain Size</h4>
                 <div class="signal-value">{html.escape(str(physical.get('size_class', 'unknown')))}</div>
                 <div class="signal-caption">
-                    Median {float(physical.get('median_diameter_mm') or 0.0):.2f} mm ·
-                    P90 {float(physical.get('p90_diameter_mm') or 0.0):.2f} mm ·
+                    Median {float(physical.get('median_diameter_mm') or 0.0):.2f} mm  | 
+                    P90 {float(physical.get('p90_diameter_mm') or 0.0):.2f} mm  | 
                     CV {float(physical.get('size_cv_percent') or 0.0):.1f}%
                 </div>
             </div>
@@ -5134,8 +5200,8 @@ def render_signal_summary(proxies: Dict[str, Any]):
                 <h4>Surface reflectance</h4>
                 <div class="signal-value">{html.escape(str(physical.get('reflectiveness_class', 'unknown')))}</div>
                 <div class="signal-caption">
-                    Shine {float(physical.get('reflectiveness_index') or 0.0):.1f}/100 ·
-                    dark {float(physical.get('dark_fraction') or 0.0):.1%} ·
+                    Shine {float(physical.get('reflectiveness_index') or 0.0):.1f}/100  | 
+                    dark {float(physical.get('dark_fraction') or 0.0):.1%}  | 
                     highlight {float(physical.get('highlight_fraction') or 0.0):.1%}
                 </div>
             </div>
@@ -5143,8 +5209,8 @@ def render_signal_summary(proxies: Dict[str, Any]):
                 <h4>Shape profile</h4>
                 <div class="signal-value">{html.escape(str(physical.get('shape_class', 'unknown')))}</div>
                 <div class="signal-caption">
-                    Aspect {float(physical.get('median_aspect_ratio') or 0.0):.2f} ·
-                    roundness {float(physical.get('median_roundness') or 0.0):.2f} ·
+                    Aspect {float(physical.get('median_aspect_ratio') or 0.0):.2f}  | 
+                    roundness {float(physical.get('median_roundness') or 0.0):.2f}  | 
                     components {int(physical.get('component_count') or 0)}
                 </div>
             </div>
@@ -5200,6 +5266,7 @@ def run_streamlit_async_inference(
     image_path: str,
     proxies: Dict[str, Any],
     stream_callback,
+    crop_type: Optional[str] = None,
 ):
     """
     Streamlit wrapper for cloud Qwen inference.
@@ -5211,6 +5278,7 @@ def run_streamlit_async_inference(
         pipeline.infer_async(
             image_path,
             proxies,
+            crop_type,
             stream_callback=stream_callback,
         )
     )
@@ -5226,11 +5294,24 @@ def format_live_ai_reasoning_result(grading_result) -> str:
             "moisture_risk": grading_result.moisture_risk.value,
             "moisture_percent": grading_result.moisture_percent_estimate,
             "confidence": grading_result.overall_confidence,
+            "selected_crop": grading_result.selected_crop,
+            "selected_crop_confidence": grading_result.selected_crop_confidence,
+            "selection_source": grading_result.selection_source,
             "reject_recommended": grading_result.reject_recommended,
             "reject_reasons": grading_result.reject_reasons,
             "model_version": grading_result.model_version,
             "decision_summary": grading_result.operator_summary,
             "signals": grading_result.signal_highlights,
+            "applied_rules": grading_result.applied_rules[:6],
+            "routing": {
+                "route_label": grading_result.route_label,
+                "route_provider": grading_result.route_provider,
+                "route_model": grading_result.route_model,
+                "route_base_url": grading_result.route_base_url,
+                "route_fallback_used": grading_result.route_fallback_used,
+                "route_attempts": grading_result.route_attempts,
+                "route_error": grading_result.route_error,
+            },
         },
         indent=2,
     )
@@ -5501,7 +5582,7 @@ if workspace == "Inspect Batch":
                     else:
                         h, w = img_arr.shape[:2]
                         validation_cols = st.columns(3)
-                        validation_cols[0].metric("Resolution", f"{w}×{h}")
+                        validation_cols[0].metric("Resolution", f"{w} x {h}")
 
                         gray = cv2.cvtColor(img_arr, cv2.COLOR_BGR2GRAY)
                         laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
@@ -5563,7 +5644,20 @@ if workspace == "Inspect Batch":
 
             if tmp_path and Path(tmp_path).exists():
                 st.markdown('<div class="visual-action-divider"></div>', unsafe_allow_html=True)
-                analyze_col, analyze_hint_col = st.columns([0.32, 0.68], gap="medium")
+                crop_col, analyze_col, analyze_hint_col = st.columns([0.34, 0.3, 0.36], gap="medium")
+                with crop_col:
+                    selected_crop_display = st.selectbox(
+                        "Crop type",
+                        ("AUTO", "Ragi", "Bajra", "Finger Millets", "Rice"),
+                        index=0,
+                        key="selected_crop_choice",
+                        help="Use AUTO to let the pipeline infer crop; otherwise force this crop for routing and prompt hints.",
+                    )
+                    selected_crop_hint = (
+                        None
+                        if selected_crop_display == "AUTO"
+                        else selected_crop_display.lower().replace(" ", "_")
+                    )
                 with analyze_col:
                     analyze_requested = st.button(
                         "Analyze",
@@ -5624,6 +5718,7 @@ if workspace == "Inspect Batch":
                             tmp_path,
                             proxies,
                             update_ai_reasoning,
+                            crop_type=selected_crop_hint,
                         )
                         streamed_text["value"] = format_live_ai_reasoning_result(
                             grading_result
@@ -5643,10 +5738,25 @@ if workspace == "Inspect Batch":
                             "farm_id": auto_meta["farm_id"],
                             "batch_id": auto_meta["batch_id"],
                             "device_model": auto_meta["device_model"],
-                            "capture_distance_estimate_cm": proxies.get("capture_distance_estimate_cm"),
-                            "capture_distance_source": proxies.get("capture_distance_source", "auto"),
+                            "capture_distance_estimate_cm": proxies.get(
+                                "capture_distance_estimate_cm"
+                            ),
+                            "capture_distance_source": proxies.get(
+                                "capture_distance_source", "auto"
+                            ),
                             "auto_meta": auto_meta,
                             "proxies": proxies,
+                            "selected_crop": grading_result.selected_crop,
+                            "selected_crop_confidence": grading_result.selected_crop_confidence,
+                            "selection_source": grading_result.selection_source,
+                            "applied_rules": grading_result.applied_rules,
+                            "route_label": grading_result.route_label,
+                            "route_provider": grading_result.route_provider,
+                            "route_model": grading_result.route_model,
+                            "route_base_url": grading_result.route_base_url,
+                            "route_fallback_used": grading_result.route_fallback_used,
+                            "route_attempts": grading_result.route_attempts,
+                            "route_error": grading_result.route_error,
                             "grading_result": grading_result,
                         }
                         st.session_state["last_result"] = {
@@ -5660,9 +5770,24 @@ if workspace == "Inspect Batch":
                             "confidence": grading_result.overall_confidence,
                             "proxies": proxies,
                             "grading_result": grading_result,
-                            "capture_distance_estimate_cm": proxies.get("capture_distance_estimate_cm"),
-                            "capture_distance_source": proxies.get("capture_distance_source", "auto"),
+                            "capture_distance_estimate_cm": proxies.get(
+                                "capture_distance_estimate_cm"
+                            ),
+                            "capture_distance_source": proxies.get(
+                                "capture_distance_source", "auto"
+                            ),
                             "auto_meta": auto_meta,
+                            "selected_crop": grading_result.selected_crop,
+                            "selected_crop_confidence": grading_result.selected_crop_confidence,
+                            "selection_source": grading_result.selection_source,
+                            "applied_rules": grading_result.applied_rules,
+                            "route_label": grading_result.route_label,
+                            "route_provider": grading_result.route_provider,
+                            "route_model": grading_result.route_model,
+                            "route_base_url": grading_result.route_base_url,
+                            "route_fallback_used": grading_result.route_fallback_used,
+                            "route_attempts": grading_result.route_attempts,
+                            "route_error": grading_result.route_error,
                         }
                         st.session_state["analysis_completed_notice"] = True
                         st.rerun()
@@ -5716,8 +5841,8 @@ if workspace == "Inspect Batch":
                     metric_cols[1].metric("Score", f"{grading_result.quality_score}/100")
                     metric_cols[2].metric("Confidence", f"{grading_result.overall_confidence}%")
                     st.caption(
-                        f"Uniformity {grading_result.uniformity_score:.1f}/100 • "
-                        f"Broken {grading_result.broken_grain_percent:.1f}% • "
+                        f"Uniformity {grading_result.uniformity_score:.1f}/100   |   "
+                        f"Broken {grading_result.broken_grain_percent:.1f}%   |   "
                         f"Foreign {grading_result.foreign_matter_percent:.1f}%"
                     )
             with result_col2:
@@ -5732,7 +5857,7 @@ if workspace == "Inspect Batch":
                         ),
                     )
                     st.caption(
-                        f"Risk {grading_result.moisture_risk.value} • "
+                        f"Risk {grading_result.moisture_risk.value}   |   "
                         f"Calibrated {'Yes' if grading_result.moisture_estimate_calibrated else 'No'}"
                     )
                     if grading_result.reject_reasons:
@@ -5789,6 +5914,10 @@ if workspace == "Inspect Batch":
                             "Device",
                             "Auto Distance",
                             "Distance Source",
+                            "Route Label",
+                            "Route",
+                            "Fallback Route",
+                            "Route Attempts",
                         ],
                         "Value": [
                             grading_result.timestamp,
@@ -5805,6 +5934,14 @@ if workspace == "Inspect Batch":
                                 else "Auto"
                             ),
                             auto_source,
+                            grading_result.route_label,
+                            f"{grading_result.route_provider}/{grading_result.route_model}",
+                            "Yes" if grading_result.route_fallback_used else "No",
+                            (
+                                json.dumps(grading_result.route_attempts, indent=2)
+                                if isinstance(grading_result.route_attempts, list)
+                                else str(grading_result.route_attempts)
+                            ),
                         ],
                     }
                 )
@@ -5814,37 +5951,60 @@ if workspace == "Inspect Batch":
             st.divider()
             with st.container(border=True):
                 st.subheader("Operator correction")
-                st.caption("If the cloud model decision is incorrect, record the fix here. Similar future samples will include this correction context.")
-                
-                with st.form("integrated_correction"):
-                    f_col1, f_col2 = st.columns(2)
-                    with f_col1:
-                        c_grade = st.selectbox("Correct Grade", ["A", "B", "C"], index=["A", "B", "C"].index(grading_result.quality_grade.value))
-                        c_moisture = st.selectbox("Correct Moisture Risk", ["LOW", "MODERATE", "HIGH", "CRITICAL"], index=["LOW", "MODERATE", "HIGH", "CRITICAL"].index(grading_result.moisture_risk.value))
-                    with f_col2:
-                        c_notes = st.text_area("Observation Notes", placeholder="e.g., Visible mold not detected, or color is actually Grade A.")
-                    
-                    if st.form_submit_button("Submit correction", use_container_width=True):
-                        feedback_item = GradingFeedbackItem(
-                            sample_id=analysis_payload["batch_id"],
-                            image_path=analysis_payload["image_path"],
-                            farm_id=analysis_payload["farm_id"],
-                            batch_id=analysis_payload["batch_id"],
-                            predicted_grade=grading_result.quality_grade.value,
-                            true_grade=c_grade,
-                            predicted_moisture_risk=grading_result.moisture_risk.value,
-                            true_moisture_risk=c_moisture,
-                            image_features=proxies,
-                            confidence=grading_result.overall_confidence,
-                            timestamp=grading_result.timestamp,
-                            device_model=analysis_payload["device_model"],
-                            notes=c_notes,
+                st.caption(
+                    "If the cloud model decision is incorrect, record the fix here. Similar future samples will include this correction context."
+                )
+
+            with st.form("integrated_correction"):
+                f_col1, f_col2 = st.columns(2)
+                with f_col1:
+                    c_grade = st.selectbox(
+                        "Correct Grade",
+                        ["A", "B", "C"],
+                        index=["A", "B", "C"].index(grading_result.quality_grade.value),
+                    )
+                    c_moisture = st.selectbox(
+                        "Correct Moisture Risk",
+                        ["LOW", "MODERATE", "HIGH", "CRITICAL"],
+                        index=["LOW", "MODERATE", "HIGH", "CRITICAL"].index(
+                            grading_result.moisture_risk.value
+                        ),
+                    )
+                with f_col2:
+                    c_notes = st.text_area(
+                        "Observation Notes",
+                        placeholder="e.g., Visible mold not detected, or color is actually Grade A.",
+                    )
+
+                if st.form_submit_button("Submit correction", use_container_width=True):
+                    feedback_item = GradingFeedbackItem(
+                        sample_id=analysis_payload["batch_id"],
+                        image_path=analysis_payload["image_path"],
+                        farm_id=analysis_payload["farm_id"],
+                        batch_id=analysis_payload["batch_id"],
+                        predicted_grade=grading_result.quality_grade.value,
+                        true_grade=c_grade,
+                        predicted_moisture_risk=grading_result.moisture_risk.value,
+                        true_moisture_risk=c_moisture,
+                        image_features=proxies,
+                        confidence=grading_result.overall_confidence,
+                        timestamp=grading_result.timestamp,
+                        device_model=analysis_payload["device_model"],
+                        notes=c_notes,
+                        selected_crop=analysis_payload.get("selected_crop", ""),
+                        selected_crop_confidence=float(
+                            analysis_payload.get("selected_crop_confidence", 0.0)
+                        ),
+                        selection_source=analysis_payload.get("selection_source", ""),
+                        applied_rules=analysis_payload.get("applied_rules", []),
+                    )
+                    if feedback_collector.submit_feedback(feedback_item):
+                        st.success(
+                            "Correction recorded. Re-analysis of this batch will now consider this signal."
                         )
-                        if feedback_collector.submit_feedback(feedback_item):
-                            st.success("Correction recorded. Re-analysis of this batch will now consider this signal.")
-                            st.rerun()
-                        else:
-                            st.error("Failed to save correction.")
+                        st.rerun()
+                    else:
+                        st.error("Failed to save correction.")
 
 elif workspace == "Review Corrections":
     render_section_intro(
@@ -5890,6 +6050,12 @@ elif workspace == "Review Corrections":
                 st.write(f"**Grade:** {result['predicted_grade']}")
                 st.write(f"**Moisture Risk:** {result['predicted_moisture']}")
                 st.write(f"**Confidence:** {result['confidence']}%")
+                st.write(f"**Crop:** {result.get('selected_crop', 'Unknown')}")
+                st.write(f"**Crop source:** {result.get('selection_source', 'default')}")
+                st.write(
+                    f"**Route:** {result.get('route_provider', 'unknown')}/{result.get('route_model', 'unknown')}"
+                )
+                st.write(f"**Route fallback:** {'Yes' if result.get('route_fallback_used') else 'No'}")
 
         with col_f2:
             with st.container(border=True):
@@ -5921,6 +6087,10 @@ elif workspace == "Review Corrections":
                 timestamp=result["timestamp"],
                 device_model=result.get("device_model", "unknown"),
                 notes=farmer_note,
+                selected_crop=result.get("selected_crop", ""),
+                selected_crop_confidence=float(result.get("selected_crop_confidence", 0.0)),
+                selection_source=result.get("selection_source", ""),
+                applied_rules=result.get("applied_rules", []),
             )
 
             if feedback_collector.submit_feedback(feedback_item):
@@ -6085,9 +6255,11 @@ st.divider()
 st.markdown(
     """
     <div style='text-align: center; color: #888; font-size: 12px;'>
-    <p>Millets Now © 2026 | Powered by Vision-RAG + configurable Qwen-VL | 
+    <p>Millets Now (c) 2026 | Powered by Vision-RAG + configurable Qwen-VL | 
     <a href="https://github.com/Atharva-007/GrainGrade-Detection">GitHub Repo</a></p>
     </div>
     """,
     unsafe_allow_html=True,
 )
+
+
