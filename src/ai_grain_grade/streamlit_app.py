@@ -23,7 +23,7 @@ import json
 import html
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 from dotenv import load_dotenv
@@ -3949,7 +3949,7 @@ def _persist_uploaded_sample(uploaded_file) -> str:
     upload_dir = SESSION_UPLOADS_DIR
     upload_dir.mkdir(parents=True, exist_ok=True)
     suffix = Path(uploaded_file.name or "sample.jpg").suffix.lower() or ".jpg"
-    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
     saved_path = upload_dir / f"sample_{stamp}{suffix}"
     with saved_path.open("wb") as f:
         f.write(uploaded_file.getbuffer())
@@ -3958,7 +3958,7 @@ def _persist_uploaded_sample(uploaded_file) -> str:
 
 def _build_auto_batch_metadata(file_signature: str, uploaded_name: str) -> Dict[str, str]:
     """Create compact read-only batch metadata for the current sample."""
-    session_stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    session_stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     return {
         "farm_id": "AUTO",
         "batch_id": f"BATCH-{session_stamp}",
@@ -4992,7 +4992,7 @@ def render_result_banner(grading_result, confidence_threshold: int):
     else:
         rule_list_html = "".join(
             f'<li><strong>{html.escape(str(rule.get("rule_name") or rule.get("rule_id") or "Rule"))}</strong> '
-            f'({html.escape(str(rule.get("rule_id") or "policy")}) -> '
+            f'({html.escape(str(rule.get("rule_id") or "policy"))}) -> '
             f'<em>{_format_rule_source(rule.get("source_file"))}</em>'
             f' - {_format_crop_confidence(rule.get("rule_confidence"))} confidence: '
             f'{html.escape(str(rule.get("evidence") or "No evidence text provided"))}</li>'
@@ -5651,7 +5651,7 @@ if workspace == "Inspect Batch":
                         ("AUTO", "Ragi", "Bajra", "Finger Millets", "Rice"),
                         index=0,
                         key="selected_crop_choice",
-                        help="Use AUTO to let the pipeline infer crop; otherwise force this crop for routing and prompt hints.",
+                        help="Use AUTO to consume crop metadata when available, otherwise the configured default crop hint is used.",
                     )
                     selected_crop_hint = (
                         None

@@ -10,6 +10,7 @@ Date: 2026-04-29
 """
 
 import pytest
+from datetime import timezone
 import tempfile
 import json
 import numpy as np
@@ -251,7 +252,7 @@ class TestVisionRAGPipeline:
             overall_confidence=80,
             pass1_confidence=100,
             pass2_confidence=75,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             model_version="v1",
             rag_chunks_used=5,
         )

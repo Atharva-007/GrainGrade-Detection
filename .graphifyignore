@@ -2,10 +2,13 @@
 .dist/
 __MACOSX/
 graphify-out/
+_fresh_remote/
+_origin_main/
 
 .claude/
 .codex/
 .code-review-graph/
+.agentmemory*/
 .hf-cache/
 .pytest_cache/
 .tmp_streamlit_test/
@@ -20,6 +23,7 @@ data/rag/*.npz
 docs/archive/
 legacy/model-doc-app/app/.env
 models/
+Crop Type.zip
 rag_index.npz
 rag_chunks.jsonl
 tmp*/

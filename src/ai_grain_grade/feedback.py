@@ -10,6 +10,8 @@ from numbers import Real
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from .rule_engine import normalize_crop_name
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_FEEDBACK_DIR = Path(__file__).resolve().parents[2] / "data" / "feedback" / "feedback_data"
@@ -56,6 +58,15 @@ class FeedbackCollector:
     def __init__(self, storage_path: str | Path = DEFAULT_FEEDBACK_DIR):
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
+        self._feedback_cache: List[GradingFeedbackItem] | None = None
+        self._feedback_signature: Tuple[int, int] | None = None
+
+    def _storage_signature(self) -> Tuple[int, int]:
+        files = list(self.storage_path.glob("*.json"))
+        if not files:
+            return (0, 0)
+        newest_mtime = max(path.stat().st_mtime_ns for path in files)
+        return (len(files), newest_mtime)
 
     def submit_feedback(self, feedback_item: GradingFeedbackItem) -> bool:
         try:
@@ -65,6 +76,8 @@ class FeedbackCollector:
                 json.dumps(asdict(feedback_item), ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            self._feedback_cache = None
+            self._feedback_signature = None
             logger.info("Feedback stored: %s", filename)
             return True
         except Exception as exc:
@@ -75,24 +88,32 @@ class FeedbackCollector:
         return len(list(self.storage_path.glob("*.json")))
 
     def load_all_feedback(self) -> List[GradingFeedbackItem]:
+        signature = self._storage_signature()
+        if self._feedback_cache is not None and self._feedback_signature == signature:
+            return list(self._feedback_cache)
+
         items: List[GradingFeedbackItem] = []
-        for filepath in self.storage_path.glob("*.json"):
+        for filepath in sorted(self.storage_path.glob("*.json")):
             try:
                 data = json.loads(filepath.read_text(encoding="utf-8"))
                 items.append(GradingFeedbackItem(**data))
             except Exception as exc:
                 logger.warning("Failed to load %s: %s", filepath, exc)
-        return items
+        self._feedback_cache = items
+        self._feedback_signature = signature
+        return list(items)
 
     def retrieve_similar_feedback(
         self,
         image_features: Dict[str, Any],
         limit: int = 3,
+        selected_crop: str | None = None,
     ) -> List[Dict[str, Any]]:
         items = self.load_all_feedback()
         if not items:
             return []
 
+        normalized_crop = normalize_crop_name(selected_crop)
         target = flatten_feature_dict(image_features)
         feature_keys = [
             "texture_entropy",
@@ -103,6 +124,9 @@ class FeedbackCollector:
         ]
         scored: List[Tuple[float, Dict[str, Any]]] = []
         for item in items:
+            item_crop = normalize_crop_name(item.selected_crop)
+            if normalized_crop and item_crop and item_crop != normalized_crop:
+                continue
             flat = flatten_feature_dict(item.image_features)
             distance = 0.0
             used = 0
@@ -129,6 +153,8 @@ class FeedbackCollector:
                         "true_moisture_risk": item.true_moisture_risk,
                         "confidence": item.confidence,
                         "notes": item.notes,
+                        "selected_crop": item.selected_crop,
+                        "selection_source": item.selection_source,
                         "distance": round(score, 4),
                         "grade_changed": grade_changed,
                         "moisture_changed": moisture_changed,

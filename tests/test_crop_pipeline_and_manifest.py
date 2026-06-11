@@ -9,6 +9,7 @@ from zipfile import ZipFile
 
 from PIL import Image
 
+from ai_grain_grade.feedback import FeedbackCollector, GradingFeedbackItem
 from ai_grain_grade.vision_rag_pipeline import (
     GradingResult,
     MoistureRisk,
@@ -224,6 +225,10 @@ def test_crop_prompt_includes_crop_context_in_rag_prompt():
         in pipeline._build_grading_prompt(_fake_physics_proxies(), rag_context, feedback_context, selected_crop="RICE")
     )
     assert (
+        "chalky_grains: A <= 2"
+        in pipeline._build_grading_prompt(_fake_physics_proxies(), rag_context, feedback_context, selected_crop="RICE")
+    )
+    assert (
         "finger millet"
         in pipeline._build_grading_prompt(_fake_physics_proxies(), rag_context, feedback_context, selected_crop="Ragi")
         .lower()
@@ -238,6 +243,30 @@ def test_crop_prompt_includes_crop_context_in_rag_prompt():
         in pipeline._build_grading_prompt(_fake_physics_proxies(), rag_context, feedback_context, selected_crop=None)
         .lower()
     )
+
+
+def test_fallback_grading_uses_crop_yaml_rule_path():
+    pipeline = VisionRAGPipeline(
+        qwen_provider="dashscope",
+        qwen_model="qwen3-vl-plus",
+        qwen_base_url="https://example.test/compatible-mode/v1",
+        qwen_api_key="test-token",
+        rag_retrieval_mode="lexical",
+    )
+
+    result = pipeline._fallback_grading(
+        _fake_physics_proxies(),
+        timestamp="2026-06-11T00:00:00+00:00",
+        selected_crop="rice",
+        selected_crop_confidence=1.0,
+        selection_source="manual",
+        route_meta={"fallback_used": True},
+    )
+
+    assert result.selected_crop == "rice"
+    assert result.manual_review_required is True
+    assert any(rule["rule_id"].startswith("rice_") for rule in result.applied_rules)
+    assert any(rule["rule_id"] == "fallback_deterministic_rules" for rule in result.applied_rules)
 
 
 def test_call_qwen_vision_routes_with_crop_fallback_metadata(tmp_path, monkeypatch):
@@ -313,6 +342,71 @@ def test_call_qwen_vision_routes_with_crop_fallback_metadata(tmp_path, monkeypat
     assert FakeClient.calls == 2
 
 
+def test_call_qwen_vision_crop_route_success_is_not_fallback(tmp_path, monkeypatch):
+    image = Image.new("RGB", (20, 20), color=(255, 230, 190))
+    with BytesIO() as image_buffer:
+        image.save(image_buffer, format="JPEG")
+        image_path = tmp_path / "routing_success.jpg"
+        image_path.write_bytes(image_buffer.getvalue())
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "{\"quality_grade\": \"A\", \"quality_score\": 90}"
+                        }
+                    }
+                ]
+            }
+
+    class FakeClient:
+        calls = 0
+
+        def __init__(self, *_, **__):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def post(self, _endpoint: str, headers=None, json=None):  # noqa: A002
+            FakeClient.calls += 1
+            return FakeResponse()
+
+    monkeypatch.setattr("ai_grain_grade.vision_rag_pipeline.httpx.Client", FakeClient)
+
+    pipeline = VisionRAGPipeline(
+        qwen_provider="dashscope",
+        qwen_model="qwen3-vl-plus",
+        qwen_base_url="https://default.example/compatible-mode/v1",
+        qwen_api_key="default-token",
+        rag_retrieval_mode="lexical",
+    )
+    _response_text, route_meta = pipeline._call_qwen_vision(
+        str(image_path),
+        "Classify the grain sample.",
+        max_tokens=10,
+        crop_route={
+            "provider": "dashscope",
+            "model": "qwen-crop-rice",
+            "base_url": "https://crop.example/compatible-mode/v1",
+            "api_key": "crop-token",
+        },
+        include_route_metadata=True,
+    )
+
+    assert route_meta["route_label"] == "crop route"
+    assert route_meta["fallback_used"] is False
+    assert FakeClient.calls == 1
+
+
 def test_repair_grading_json_uses_crop_route(monkeypatch):
     pipeline = VisionRAGPipeline(
         qwen_provider="dashscope",
@@ -379,6 +473,96 @@ def test_manifest_records_quality_flags_for_validation(tmp_path):
     assert any(
         "extension_profile:" in issue for issue in manifest["archive_errors"]["Ragi dataset.zip"]
     )
+
+
+def test_manifest_label_and_crop_normalization_handle_grade_spacing(tmp_path):
+    _make_image_archive(
+        tmp_path / "Ragi dataset.zip",
+        {
+            "Grade A/ragi_a.jpg": True,
+            "Grade-C/ragi_c.jpg": True,
+        },
+    )
+
+    manifest = build_manifest(
+        source_dir=tmp_path,
+        seed=13,
+        train_ratio=0.5,
+        require_labels=True,
+    )
+
+    assert set(manifest["crops"]) == {"finger_millets"}
+    labels = {sample["member_path"]: sample["label"] for sample in manifest["samples"]}
+    assert labels["Grade A/ragi_a.jpg"] == "A"
+    assert labels["Grade-C/ragi_c.jpg"] == "C"
+    assert all("flat_archive_path" not in sample["quality_flags"] for sample in manifest["samples"])
+
+
+def test_rag_context_promotes_finger_millet_alias_paths():
+    pipeline = VisionRAGPipeline(
+        qwen_provider="dashscope",
+        qwen_model="qwen3-vl-plus",
+        qwen_base_url="https://example.test/compatible-mode/v1",
+        qwen_api_key="test-token",
+        rag_retrieval_mode="lexical",
+    )
+
+    class FakeRag:
+        def retrieve(self, _query, k=8):
+            return [
+                {
+                    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+                    "title": "generic",
+                    "content": "generic rules",
+                    "retrieval_score": 9.0,
+                },
+                {
+                    "source": "docs/rag/crop_knowledge/FingerMillets/GPU45.MD",
+                    "title": "finger",
+                    "content": "finger millet rules",
+                    "retrieval_score": 1.0,
+                },
+            ]
+
+    pipeline.rag_engine = FakeRag()
+    results = pipeline._retrieve_rag_context(_fake_physics_proxies(), crop_type="Ragi", k=2)
+
+    assert results[0]["source"].endswith("FingerMillets/GPU45.MD")
+
+
+def test_feedback_similarity_filters_by_crop(tmp_path):
+    collector = FeedbackCollector(storage_path=tmp_path)
+    base_item = {
+        "sample_id": "sample",
+        "image_path": "image.jpg",
+        "farm_id": "farm",
+        "predicted_grade": "B",
+        "true_grade": "A",
+        "predicted_moisture_risk": "LOW",
+        "true_moisture_risk": "LOW",
+        "image_features": _fake_physics_proxies(),
+        "confidence": 80.0,
+        "timestamp": "2026-06-11T00:00:00Z",
+        "device_model": "test",
+    }
+    collector.submit_feedback(
+        GradingFeedbackItem(**base_item, selected_crop="rice", notes="rice correction")
+    )
+    collector.submit_feedback(
+        GradingFeedbackItem(
+            **{**base_item, "sample_id": "finger"},
+            selected_crop="finger_millets",
+            notes="finger correction",
+        )
+    )
+
+    results = collector.retrieve_similar_feedback(
+        _fake_physics_proxies(),
+        selected_crop="ragi",
+        limit=3,
+    )
+
+    assert [item["sample_id"] for item in results] == ["finger"]
 
 def test_training_artifact_filtering_is_deterministic(tmp_path):
     """Quality-filtered exports should be stable by seed and preserve filter semantics."""

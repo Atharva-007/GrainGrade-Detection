@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import httpx
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from pathlib import PurePosixPath
 from PIL import Image
@@ -36,7 +36,7 @@ from .paths import FEEDBACK_DIR, RAG_INDEX_PATH
 from .rag_engine import RAGEngine
 from .moisture_calibration import MoistureCalibrator
 from .feedback import FeedbackCollector
-from .rule_engine import RagiRuleEngine
+from .rule_engine import CropRuleEngine, normalize_crop_name
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -230,7 +230,7 @@ class VisionRAGPipeline:
 
         # Initialize Moisture Calibrator
         self.moisture_calibrator = MoistureCalibrator()
-        self.rule_engine = RagiRuleEngine()
+        self.rule_engine = CropRuleEngine()
 
         # Initialize RAG Engine
         self.rag_engine = RAGEngine(
@@ -396,6 +396,13 @@ class VisionRAGPipeline:
             "safety_crop_label": "general grain",
             "ruleset_hint": "grain",
         }
+
+    def _crop_rule_summary(self, crop_type: Optional[str]) -> str:
+        """Return compact crop YAML thresholds for prompt grounding."""
+        lines = self.rule_engine.describe_crop_rules(crop_type)
+        if not lines:
+            return "- No crop-specific YAML thresholds found; use retrieved rule anchors."
+        return "\n".join(f"- {line}" for line in lines)
 
     def _resolve_crop_selection(
         self,
@@ -623,7 +630,7 @@ class VisionRAGPipeline:
         Returns:
             Complete GradingResult
         """
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
         selected_crop, selected_crop_confidence, selection_source = self._resolve_crop_selection(
             crop_type,
             physics_proxies=physics_proxies,
@@ -743,13 +750,13 @@ Specifically look for:
 5. Excessive grain clumping (often linked to moisture and storage issues)
 
 Respond in JSON format:
-{
+{{
   "hazard_found": true/false,
   "hazard_type": "none" | "mold" | "stone" | "insect" | "webbing" | "foreign_matter",
   "confidence": 0.0-1.0,
   "description": "Brief explanation",
-  "bounding_boxes": [{"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.2}]
-}"""
+  "bounding_boxes": [{{"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.2}}]
+}}"""
 
             response = self._call_qwen_vision(
                 image_path,
@@ -801,7 +808,10 @@ Respond in JSON format:
         try:
             # 1. Retrieve relevant RAG chunks
             rag_context = self._retrieve_rag_context(physics_proxies, crop_type=crop_type)
-            feedback_context = self._retrieve_feedback_context(physics_proxies)
+            feedback_context = self._retrieve_feedback_context(
+                physics_proxies,
+                crop_type=selected_crop,
+            )
 
             # 2. Build comprehensive grading prompt
             grading_prompt = self._build_grading_prompt(
@@ -844,6 +854,7 @@ Respond in JSON format:
                 moisture_risk=moisture_risk,
                 moisture_percent=moisture_percent,
                 moisture_calibrated=is_calib,
+                crop_type=selected_crop,
             )
 
             # 6. Compute confidence score
@@ -853,6 +864,7 @@ Respond in JSON format:
             model_confidence = float(response_json.get("model_confidence", 70))
             reject_reasons = list(grade["reject_reasons"])
             reject_recommended = bool(grade["reject"])
+            route_failed = bool(route_meta.get("fallback_used") or route_meta.get("error"))
             if moisture_risk == MoistureRisk.CRITICAL:
                 reject_recommended = True
                 reject_reasons.append("Critical moisture risk; dry immediately before storage")
@@ -867,6 +879,26 @@ Respond in JSON format:
             )
 
             signal_highlights = self._summarize_signals(physics_proxies, moisture_risk)
+            if route_failed:
+                signal_highlights = list(
+                    dict.fromkeys(
+                        [
+                            "Crop-specific model route failed or fell back; manual review required",
+                            *signal_highlights,
+                        ]
+                    )
+                )
+                applied_rules.append(
+                    {
+                        "rule_id": "crop_route_manual_review",
+                        "rule_name": "Crop route fallback review",
+                        "source_file": "vision_rag_pipeline._call_qwen_vision",
+                        "evidence": route_meta.get("error")
+                        or "Crop-specific route fell back to the default Qwen route.",
+                        "rule_confidence": 80.0,
+                    }
+                )
+                overall_conf = max(0, overall_conf - 10)
             operator_summary = self._build_operator_summary(
                 grade["grade"],
                 moisture_risk,
@@ -878,6 +910,7 @@ Respond in JSON format:
                 reject_recommended
                 or overall_conf < 65
                 or moisture_risk in {MoistureRisk.HIGH, MoistureRisk.CRITICAL}
+                or route_failed
             )
 
             return GradingResult(
@@ -970,27 +1003,17 @@ Respond in JSON format:
 
     def _normalize_crop_hint(self, crop_type: Optional[str]) -> Optional[str]:
         """Normalize optional crop labels for best-effort retrieval guidance."""
-        if not crop_type:
-            return None
-        normalized = str(crop_type).strip().lower().replace("-", " ")
-        normalized = " ".join(normalized.split())
-        if not normalized or normalized == "auto":
-            return None
-        if normalized in {
-            "ragi",
-            "ragi / fingermillets",
-            "ragi/fingermillets",
-            "ragi/fingermillet",
-            "finger millet",
-            "fingermillets",
-            "fingermillet",
-        }:
-            return "finger_millets"
-        if normalized in {"bajari", "bajri", "bajara", "bajra", "pearl millet", "pearlmillet"}:
-            return "bajra"
-        if normalized in {"rice", "paddy", "dhan"}:
-            return "rice"
-        return normalized
+        return normalize_crop_name(crop_type) or None
+
+    def _crop_source_aliases(self, crop_type: Optional[str]) -> set[str]:
+        normalized = self._normalize_crop_hint(crop_type)
+        if normalized == "finger_millets":
+            return {"finger_millets", "fingermillets", "finger millet", "ragi", "nachani"}
+        if normalized == "bajra":
+            return {"bajra", "bajari", "bajri", "bajara", "pearl millet", "pearlmillet"}
+        if normalized == "rice":
+            return {"rice", "paddy", "dhan"}
+        return {normalized} if normalized else set()
 
     def _retrieve_rag_context(
         self,
@@ -1007,9 +1030,14 @@ Respond in JSON format:
 
         preferred: List[Dict[str, Any]] = []
         fallback: List[Dict[str, Any]] = []
+        aliases = self._crop_source_aliases(normalized_crop)
         for chunk in candidates:
             source = str(chunk.get("source", "")).lower()
-            if "/crop_knowledge/" in source and normalized_crop in source:
+            source_compact = source.replace("_", "").replace("-", "").replace(" ", "")
+            if "/crop_knowledge/" in source and any(
+                alias.replace("_", "").replace("-", "").replace(" ", "") in source_compact
+                for alias in aliases
+            ):
                 preferred.append(chunk)
             else:
                 fallback.append(chunk)
@@ -1018,11 +1046,16 @@ Respond in JSON format:
             return (preferred + fallback)[:k]
         return candidates[:k]
 
-    def _retrieve_feedback_context(self, physics_proxies: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _retrieve_feedback_context(
+        self,
+        physics_proxies: Dict[str, Any],
+        crop_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """Fetch similar human corrections so feedback helps before the next retrain."""
         return self.feedback_collector.retrieve_similar_feedback(
             physics_proxies,
             limit=3,
+            selected_crop=self._normalize_crop_hint(crop_type),
         )
 
     def _build_grading_prompt(
@@ -1038,16 +1071,20 @@ Respond in JSON format:
         crop_context = self._crop_prompt_context(selected_crop)
         crop_name = crop_context["crop_display"]
         ruleset_hint = crop_context["ruleset_hint"]
+        crop_rule_summary = self._crop_rule_summary(selected_crop)
 
         prompt = f"""Grade this {crop_name} batch. Return ONLY one JSON object with no prose.
 
 Rules:
 - Apply FAO/BIS-aligned {ruleset_hint} thresholds from the retrieved rule anchors.
-- Hazard, mold, or foreign matter above 1.0% => Grade C/reject.
-- Moisture, foreign matter, and damaged grain thresholds override the image model.
+- Hazard, mold, insects, stones, deleterious material, or metrics beyond Grade C => Grade C/reject.
+- Moisture and crop-specific defect thresholds override the image model.
 - Grade A only if the lot is very uniform, clean, and physics signals are dry/stable.
 - If the batch looks mixed, bimodal, or moisture-heavy, prefer Grade C.
 - Grade B is only for usable commercial lots without strong hazard or moisture signals.
+
+Crop YAML thresholds:
+{crop_rule_summary}
 
 Rule anchors:
 {context_str}
@@ -1071,8 +1108,19 @@ JSON schema:
   "size_deviation": 0-100,
   "shape_defect_fraction": 0-100,
   "broken_grain_percent": 0-100,
+  "broken_grains_percent": 0-100,
+  "damaged_grains_percent": 0-100,
+  "chalky_grains_percent": 0-100,
   "foreign_matter_percent": 0-100,
+  "organic_extraneous_matter_percent": 0-100,
+  "inorganic_extraneous_matter_percent": 0-100,
   "other_edible_grains_percent": 0-100,
+  "immature_grains_percent": 0-100,
+  "weevilled_grains_percent": 0-100,
+  "color_uniformity_score": 0-100,
+  "size_uniformity_score": 0-100,
+  "shape_uniformity_score": 0-100,
+  "surface_defects_percent": 0-100,
   "bimodal_color_detected": true,
   "mold_visible": false,
   "visible_defects": ["short labels"],
@@ -1183,7 +1231,9 @@ JSON schema:
                         "provider": provider,
                         "model": model,
                         "base_url": base_url,
-                        "fallback_used": route is not None or len(attempted_routes) > 1,
+                        "fallback_used": route_label == "default" and any(
+                            item.get("route_label") == "crop route" for item in attempted_routes
+                        ),
                         "attempted_routes": attempted_routes,
                         "error": None,
                         "route": route or {},
@@ -1413,7 +1463,9 @@ JSON schema:
                     "provider": provider,
                     "model": model,
                     "base_url": base_url,
-                    "fallback_used": route is not None or len(attempted_routes) > 1,
+                    "fallback_used": route_label == "default" and any(
+                        item.get("route_label") == "crop route" for item in attempted_routes
+                    ),
                     "attempted_routes": [
                         f"{r['route_label']}:{r['provider']}/{r['model']}@{r['base_url']}"
                         for r in attempted_routes
@@ -1586,6 +1638,7 @@ Notes:
         moisture_risk: Optional[MoistureRisk] = None,
         moisture_percent: Optional[float] = None,
         moisture_calibrated: bool = True,
+        crop_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Apply deterministic FAO/BIS-aligned threshold rules."""
         decision = self.rule_engine.evaluate(
@@ -1594,6 +1647,7 @@ Notes:
             moisture_risk=moisture_risk,
             moisture_percent=moisture_percent,
             moisture_calibrated=moisture_calibrated,
+            crop_type=crop_type,
         )
         return {
             "grade": QualityGrade(decision.grade),
@@ -1719,41 +1773,76 @@ Notes:
     ) -> GradingResult:
         """Fallback grading when LLM inference fails."""
 
-        # Conservative rules based on physics proxies alone
-        darkness = physics_proxies["lab_features"]["color_darkness_index"]
-        clumping = physics_proxies["clumping"]["density"]
-        uniformity = physics_proxies.get("uniformity_score", 70.0)
-        roughness = physics_proxies.get("roughness_score", 50.0)
-
-        if darkness > 60 or clumping > 0.3 or uniformity < 55:
-            grade = QualityGrade.C
-            score = 40
-        elif darkness < 42 and clumping < 0.1 and uniformity > 78 and roughness > 20:
-            grade = QualityGrade.A
-            score = 82
-        else:
-            grade = QualityGrade.B
-            score = 65
-
         moisture_risk, moisture_percent, is_calib = self._estimate_moisture_risk(physics_proxies)
+        darkness = float(physics_proxies.get("lab_features", {}).get("color_darkness_index", 0.0))
+        clumping = float(physics_proxies.get("clumping", {}).get("density", 0.0))
+        uniformity = float(physics_proxies.get("uniformity_score", 70.0))
+        roughness = float(physics_proxies.get("roughness_score", 50.0))
+        coverage = float(physics_proxies.get("grain_mask_coverage", 0.5))
+
+        off_tone = float(np.clip(max(0.0, darkness - 35.0) * 0.45 + max(0.0, 92.0 - uniformity) * 0.18, 0.0, 35.0))
+        size_deviation = float(np.clip(max(0.0, 95.0 - uniformity) * 0.35, 0.0, 35.0))
+        shape_defect = float(np.clip(max(0.0, 90.0 - uniformity) * 0.25 + clumping * 18.0, 0.0, 35.0))
+        broken_grain = float(np.clip(max(0.0, 90.0 - uniformity) * 0.05 + clumping * 8.0, 0.0, 20.0))
+        damaged_grains = float(np.clip(shape_defect * 0.14 + max(0.0, 35.0 - roughness) * 0.03, 0.0, 8.0))
+        foreign_matter = float(np.clip(0.2 + max(0.0, 0.18 - coverage) * 6.0, 0.0, 3.0))
+        surface_defects = float(np.clip(shape_defect + max(0.0, 45.0 - roughness) * 0.08, 0.0, 25.0))
+        provisional_grade = "A" if (
+            darkness < 42 and clumping < 0.10 and uniformity > 78 and roughness > 20
+        ) else ("C" if darkness > 60 or clumping > 0.30 or uniformity < 55 else "B")
+
+        fallback_response = {
+            "quality_grade": provisional_grade,
+            "quality_score": 65,
+            "off_tone_fraction": off_tone,
+            "size_deviation": size_deviation,
+            "shape_defect_fraction": shape_defect,
+            "broken_grain_percent": broken_grain,
+            "broken_grains_percent": broken_grain,
+            "damaged_grains_percent": damaged_grains,
+            "chalky_grains_percent": off_tone,
+            "foreign_matter_percent": foreign_matter,
+            "organic_extraneous_matter_percent": foreign_matter,
+            "inorganic_extraneous_matter_percent": 0.0,
+            "other_edible_grains_percent": 0.0,
+            "immature_grains_percent": size_deviation * 0.25,
+            "weevilled_grains_percent": 0.0,
+            "color_uniformity_score": max(0.0, 100.0 - off_tone),
+            "size_uniformity_score": max(0.0, 100.0 - size_deviation),
+            "shape_uniformity_score": max(0.0, 100.0 - shape_defect),
+            "surface_defects_percent": surface_defects,
+            "bimodal_color_detected": off_tone > 12.0,
+            "mold_visible": False,
+            "visible_defects": [],
+            "model_confidence": 45,
+            "brief_reason": "Qwen-VL unavailable; crop YAML rules applied to conservative proxy estimates.",
+        }
+        grade = self._apply_grading_logic(
+            fallback_response,
+            physics_proxies,
+            moisture_risk=moisture_risk,
+            moisture_percent=moisture_percent,
+            moisture_calibrated=is_calib,
+            crop_type=selected_crop,
+        )
         signal_highlights = self._summarize_signals(physics_proxies, moisture_risk)
         signal_highlights = list(
             dict.fromkeys(
                 [
-                    "Qwen-VL unavailable; deterministic proxy fallback used",
+                    "Qwen-VL unavailable; crop-aware deterministic fallback used",
                     *signal_highlights,
                 ]
             )
         )
-        reject_reasons: List[str] = []
-        reject_recommended = False
+        reject_reasons: List[str] = list(grade.get("reject_reasons", []))
+        reject_recommended = bool(grade.get("reject"))
         if moisture_risk == MoistureRisk.CRITICAL:
             reject_recommended = True
             reject_reasons.append("Critical moisture risk; dry immediately before storage")
-        elif moisture_risk == MoistureRisk.HIGH and grade == QualityGrade.C:
+        elif moisture_risk == MoistureRisk.HIGH and grade["grade"] == QualityGrade.C:
             reject_recommended = True
             reject_reasons.append("High moisture plus low-quality proxy evidence; hold before storage")
-        elif grade == QualityGrade.C:
+        elif grade["grade"] == QualityGrade.C and not reject_reasons:
             reject_reasons.extend(
                 self._build_proxy_fastpath_reasons(
                     physics_proxies=physics_proxies,
@@ -1761,20 +1850,27 @@ Notes:
                 )
             )
         operator_summary = self._build_operator_summary(
-            grade,
+            grade["grade"],
             moisture_risk,
             reject_recommended,
             40,
             reject_reasons,
         )
         selected_crop_display = selected_crop or self.default_crop_hint or "unknown"
-        applied_rules = [
+        applied_rules = self._build_applied_rules(
+            grade.get("rule_hits", []),
+            [],
+            base_confidence=60.0,
+            fallback_prefix="Crop YAML deterministic fallback",
+        )
+        applied_rules.extend(
+            [
             {
                 "rule_id": "fallback_deterministic_rules",
-                "rule_name": "Deterministic proxy fallback",
+                "rule_name": "Crop-aware deterministic proxy fallback",
                 "source_file": "vision_rag_pipeline._fallback_grading",
                 "evidence": (
-                    "Qwen-VL returned unusable output; deterministic thresholds and proxy rules were used."
+                    "Qwen-VL returned unusable output; proxy estimates were evaluated by the crop YAML rule engine."
                 ),
                 "rule_confidence": 60.0,
             },
@@ -1785,17 +1881,18 @@ Notes:
                 "evidence": f"Crop resolved to {selected_crop_display} via {selection_source}.",
                 "rule_confidence": float(np.clip(selected_crop_confidence * 100.0, 0.0, 100.0)),
             },
-        ]
+            ]
+        )
 
         return GradingResult(
-            quality_grade=grade,
-            quality_score=score,
+            quality_grade=grade["grade"],
+            quality_score=grade["score"],
             reject_recommended=reject_recommended,
             reject_reasons=list(dict.fromkeys(reject_reasons)),
-            broken_grain_percent=2.0,
-            foreign_matter_percent=1.0,
-            uniformity_score=60.0,
-            mold_visible=False,
+            broken_grain_percent=grade.get("broken_grain", broken_grain),
+            foreign_matter_percent=grade.get("foreign_matter", foreign_matter),
+            uniformity_score=grade.get("uniformity", uniformity),
+            mold_visible=grade.get("mold_visible", False),
             moisture_risk=moisture_risk,
             moisture_estimate_calibrated=is_calib,
             moisture_percent_estimate=moisture_percent,

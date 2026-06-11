@@ -58,10 +58,8 @@ def normalize_crop_name(archive_name: str) -> str:
         return "unknown"
     if raw in {"bajari", "bajri", "bajra"}:
         return "bajra"
-    if raw in {"finger millets", "fingermillets", "fingermillets"}:
+    if raw in {"finger millets", "fingermillets", "fingermillet", "ragi", "nachani"}:
         return "finger_millets"
-    if raw in {"ragi"}:
-        return "ragi"
     if raw in {"rice", "dhan", "paddy"}:
         return "rice"
     return raw
@@ -71,12 +69,12 @@ def label_from_path(member_path: str) -> Optional[str]:
     """Infer label from directory/name tokens, e.g., Grade A."""
     parts = [part for part in Path(member_path).parts if part]
     for part in reversed(parts[:-1]):
-        match = re.search(r"\bgrade[_\\s-]*([abcABC])\b", part or "")
+        match = re.search(r"\bgrade[\s_-]*([abcABC])\b", part or "", re.IGNORECASE)
         if match:
             return match.group(1).upper()
     fname = Path(member_path).name
     filename = re.sub(r"[^a-z0-9._-]", " ", fname.lower())
-    match = re.search(r"\bgrade[_\\s-]*([abcABC])\b", filename)
+    match = re.search(r"\bgrade[\s_-]*([abcABC])\b", filename, re.IGNORECASE)
     if match:
         return match.group(1).upper()
     return None
@@ -115,7 +113,7 @@ def build_entries(archive_path: Path) -> Tuple[List[ManifestEntry], List[str]]:
             flags: List[str] = []
             if not label:
                 flags.append("missing_label")
-            if " " not in member.strip("/"):
+            if len(Path(member).parts) < 2:
                 flags.append("flat_archive_path")
             sample_id = hashlib.sha1(f"{archive_path.name}|{member}".encode("utf-8")).hexdigest()[:20]
             image_uri = f"{archive_path.name}::{member}"
