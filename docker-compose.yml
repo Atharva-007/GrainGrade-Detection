@@ -23,6 +23,20 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+  grading-worker:
+    build:
+      context: .
+    image: ai-grain-grade:local
+    command: python -m backend.worker
+    env_file:
+      - .env
+    environment:
+      QWEN_VL_PROVIDER: ${QWEN_VL_PROVIDER:-dashscope}
+      GRADING_BACKGROUND_ON_SUBMIT: "0"
+    volumes:
+      - feedback_data:/app/data/feedback/feedback_data
+    depends_on:
+      - backend
   frontend:
     image: node:22-alpine
     working_dir: /app/frontend
