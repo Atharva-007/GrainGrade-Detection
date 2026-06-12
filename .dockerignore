@@ -46,6 +46,7 @@ models/
 docs/archive/
 docs/prompts/
 docs/specs/
+archive/
 legacy/
 scripts/
 supabase/

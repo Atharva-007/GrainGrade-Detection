@@ -10,6 +10,10 @@ _origin_main/
 .code-review-graph/
 .agentmemory*/
 .hf-cache/
+.torch-cache/
+.agentmemory-cache/
+.agentmemory-cache-npx/
+.agentmemory-npm/
 .pytest_cache/
 .tmp_streamlit_test/
 __pycache__/
@@ -21,6 +25,7 @@ __pycache__/
 data/feedback/feedback_data/session_uploads/
 data/rag/*.npz
 docs/archive/
+archive/
 legacy/model-doc-app/app/.env
 models/
 Crop Type.zip

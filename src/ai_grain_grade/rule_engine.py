@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from .paths import LEGACY_RAG_DOCS_DIR, RAG_DOCS_DIR
+
 
 GRADE_ORDER = {"C": 0, "B": 1, "A": 2}
 NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
@@ -574,7 +576,7 @@ class CropMetricRule:
 
 @dataclass(frozen=True)
 class CropRuleSet:
-    """Typed crop rule set loaded from docs/rag/crop_knowledge/grading_rules."""
+    """Typed crop rule set loaded from knowledge/rag/crop_knowledge/grading_rules."""
 
     crop: str
     metrics: Dict[str, CropMetricRule]
@@ -710,10 +712,10 @@ class CropRuleEngine:
     }
 
     def __init__(self, rules_dir: Optional[str | Path] = None):
-        repo_root = Path(__file__).resolve().parents[2]
-        self.rules_dir = Path(rules_dir) if rules_dir else (
-            repo_root / "docs" / "rag" / "crop_knowledge" / "grading_rules"
-        )
+        default_rules_dir = RAG_DOCS_DIR / "crop_knowledge" / "grading_rules"
+        if not default_rules_dir.exists():
+            default_rules_dir = LEGACY_RAG_DOCS_DIR / "crop_knowledge" / "grading_rules"
+        self.rules_dir = Path(rules_dir) if rules_dir else default_rules_dir
         self._fallback = RagiRuleEngine()
         self._rule_sets: Dict[str, Optional[CropRuleSet]] = {}
 

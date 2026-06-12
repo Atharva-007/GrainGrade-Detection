@@ -666,13 +666,13 @@ def test_rag_context_promotes_finger_millet_alias_paths():
         def retrieve(self, _query, k=8):
             return [
                 {
-                    "source": "docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
+                    "source": "knowledge/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md",
                     "title": "generic",
                     "content": "generic rules",
                     "retrieval_score": 9.0,
                 },
                 {
-                    "source": "docs/rag/crop_knowledge/FingerMillets/GPU45.MD",
+                    "source": "knowledge/rag/crop_knowledge/FingerMillets/GPU45.MD",
                     "title": "finger",
                     "content": "finger millet rules",
                     "retrieval_score": 1.0,

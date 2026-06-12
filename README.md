@@ -6,7 +6,7 @@ AI Grain Grade is a FastAPI + React application for grain quality grading. It co
 
 - Accepts a grain image and a moisture-meter display image through a React inspection console.
 - Extracts the exact meter moisture value with OCR before grading.
-- Requires grain type and variety selection from `docs/rag/crop_knowledge`.
+- Requires grain type and variety selection from `knowledge/rag/crop_knowledge`.
 - Extracts deterministic image signals with OpenCV from the grain image.
 - Retrieves authoritative grading and moisture rules from local Markdown indexes.
 - Calls the configured cloud Qwen-VL provider for meter OCR and vision inference.
@@ -97,7 +97,7 @@ Cloud Qwen inference is configured through runtime environment variables:
 |-- .env.example                   # Local environment template
 |-- data/rag/                      # Local RAG indexes
 |-- data/feedback/                 # Example and runtime feedback records
-|-- docs/rag/                      # Runtime RAG source documents
+|-- knowledge/rag/                 # Runtime RAG source documents
 |-- examples/                      # Example calibration images
 |-- graphify-out/                  # Code knowledge graph outputs
 |-- scripts/                       # Local helper scripts
@@ -108,7 +108,7 @@ Cloud Qwen inference is configured through runtime environment variables:
 
 - `GET /api/health` - service readiness, runtime status, feedback count.
 - `GET /api/runtime` - model/provider status without secrets.
-- `GET /api/crops` - crop and variety catalog derived from `docs/rag/crop_knowledge`.
+- `GET /api/crops` - crop and variety catalog derived from `knowledge/rag/crop_knowledge`.
 - `POST /api/analyze` - multipart upload with:
   - `grain_image`: grain lot JPG/PNG.
   - `moisture_image`: moisture machine display JPG/PNG.
@@ -139,11 +139,11 @@ Secrets belong in `.env`; `.env` and `*.env` are ignored by git.
 
 The local RAG index reads:
 
-- `docs/rag/FAO_BIS_RAGI_RULES.md`
-- `docs/rag/AUTHORIZED_RAGI_DATA_SOURCES.md`
-- `docs/rag/ARCHITECTURE.md`
-- `docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md`
-- `docs/rag/crop_knowledge/**/*`
+- `knowledge/rag/FAO_BIS_RAGI_RULES.md`
+- `knowledge/rag/AUTHORIZED_RAGI_DATA_SOURCES.md`
+- `knowledge/rag/ARCHITECTURE.md`
+- `knowledge/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md`
+- `knowledge/rag/crop_knowledge/**/*`
 
 The chunk index lives at `data/rag/rag_index.json`.
 

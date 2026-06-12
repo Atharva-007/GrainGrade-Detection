@@ -16,6 +16,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from .paths import LEGACY_RAG_DOCS_DIR, PROJECT_ROOT, RAG_DOCS_DIR, RAG_INDEX_PATH
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -24,8 +26,9 @@ HEADING_RE = re.compile(r"^(#{1,3})\s+(.+?)\s*$")
 MAX_CHARS_PER_CHUNK = 1200
 OVERLAP_CHARS = 180
 INDEX_VERSION = 2
-DEFAULT_INDEX_PATH = Path(__file__).resolve().parents[2] / "data" / "rag" / "rag_index.json"
-DEFAULT_DOCS_DIR = Path(__file__).resolve().parents[2] / "docs" / "rag"
+DEFAULT_INDEX_PATH = RAG_INDEX_PATH
+DEFAULT_DOCS_DIR = RAG_DOCS_DIR
+LEGACY_DOCS_DIR = LEGACY_RAG_DOCS_DIR
 CROP_KNOWLEDGE_DIR = DEFAULT_DOCS_DIR / "crop_knowledge"
 CROP_KNOWLEDGE_EXTENSIONS = {".md", ".markdown", ".yaml", ".yml"}
 
@@ -41,9 +44,9 @@ class RAGEngine:
         retrieval_mode: str = "lexical",
     ):
         self.index_path = Path(index_path)
-        self.repo_root = Path(__file__).resolve().parents[2]
-        self.docs_dir = DEFAULT_DOCS_DIR
-        self.crop_docs_dir = CROP_KNOWLEDGE_DIR
+        self.repo_root = PROJECT_ROOT
+        self.docs_dir = DEFAULT_DOCS_DIR if DEFAULT_DOCS_DIR.exists() else LEGACY_DOCS_DIR
+        self.crop_docs_dir = self.docs_dir / "crop_knowledge"
         self.retrieval_mode = "lexical"
         if retrieval_mode.lower().strip() != "lexical":
             logger.warning("Only lexical RAG is supported in the cloud-only build.")
@@ -140,11 +143,17 @@ class RAGEngine:
     def _is_retrieval_document(self, path: Path) -> bool:
         norm = _norm_path(path.relative_to(self.repo_root))
         if norm in {
+            "knowledge/rag/unified_ragi_quality_and_moisture_spec.md",
+            "knowledge/rag/architecture.md",
+            "knowledge/rag/fao_bis_ragi_rules.md",
+            "knowledge/rag/authorized_ragi_data_sources.md",
             "docs/rag/unified_ragi_quality_and_moisture_spec.md",
             "docs/rag/architecture.md",
             "docs/rag/fao_bis_ragi_rules.md",
             "docs/rag/authorized_ragi_data_sources.md",
         }:
+            return True
+        if norm.startswith("knowledge/rag/crop_knowledge/"):
             return True
         if norm.startswith("docs/rag/crop_knowledge/"):
             return True
