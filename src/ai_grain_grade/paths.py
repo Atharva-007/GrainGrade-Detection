@@ -16,6 +16,10 @@ DEFAULT_CROP_DATASET_MANIFEST_PATH = DATASET_MANIFEST_DIR / "crop_dataset_manife
 
 FEEDBACK_DIR = DATA_DIR / "feedback" / "feedback_data"
 SESSION_UPLOADS_DIR = FEEDBACK_DIR / "session_uploads"
+TRAINING_EXPORT_DIR = DATA_DIR / "feedback" / "training_exports"
+FEEDBACK_TRAINING_EXPORT_PATH = TRAINING_EXPORT_DIR / "feedback_training.jsonl"
+LOGS_DIR = DATA_DIR / "logs"
+SESSION_LOGS_DIR = LOGS_DIR / "sessions"
 
 DOCS_DIR = PROJECT_ROOT / "docs"
 RAG_DOCS_DIR = DOCS_DIR / "rag"
@@ -26,5 +30,7 @@ def ensure_runtime_dirs() -> None:
     """Create writable runtime directories used by the app."""
     FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
     SESSION_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    TRAINING_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    SESSION_LOGS_DIR.mkdir(parents=True, exist_ok=True)
     RAG_DATA_DIR.mkdir(parents=True, exist_ok=True)
     DATASET_MANIFEST_DIR.mkdir(parents=True, exist_ok=True)

@@ -49,6 +49,20 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_csv(name: str, default: Tuple[str, ...]) -> List[str]:
+    raw = os.getenv(name)
+    if raw is None:
+        return list(default)
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 def _first_env(*names: str, default: str = "") -> str:
     for name in names:
         value = os.getenv(name)
@@ -59,6 +73,7 @@ def _first_env(*names: str, default: str = "") -> str:
 
 LEGACY_SILICONFLOW_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
 DEFAULT_DASHSCOPE_MODEL = "qwen3-vl-plus"
+DEFAULT_DASHSCOPE_FALLBACK_MODELS = ("qwen3-vl-flash", "qwen-vl-plus")
 DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 DEFAULT_SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
 CLOUD_QWEN_PROVIDERS = {"dashscope", "siliconflow", "custom"}
@@ -116,7 +131,12 @@ class GradingResult:
     timestamp: str
     model_version: str
     rag_chunks_used: int
+    grain_quality_grade: QualityGrade = QualityGrade.B
+    grain_quality_score: int = 75
+    moisture_quality_score: int = 100
+    score_breakdown: Dict[str, Any] = field(default_factory=dict)
     selected_crop: Optional[str] = None
+    selected_variety: Optional[str] = None
     selected_crop_confidence: float = 0.0
     selection_source: str = "default"
     applied_rules: List[Dict[str, Any]] = field(default_factory=list)
@@ -130,6 +150,9 @@ class GradingResult:
     operator_summary: str = ""
     manual_review_required: bool = False
     signal_highlights: List[str] = field(default_factory=list)
+    measured_moisture_percent: Optional[float] = None
+    moisture_source: str = "grain_proxy"
+    moisture_ocr_confidence: Optional[float] = None
 
 
 class VisionRAGPipeline:
@@ -221,12 +244,18 @@ class VisionRAGPipeline:
             if qwen_timeout_seconds is not None
             else _env_float("QWEN_VL_TIMEOUT_SECONDS", 75.0)
         )
+        self.qwen_enable_thinking = _env_bool("QWEN_VL_ENABLE_THINKING", False)
+        self.qwen_fallback_models = _env_csv(
+            "QWEN_VL_FALLBACK_MODELS",
+            DEFAULT_DASHSCOPE_FALLBACK_MODELS,
+        )
         self.siliconflow_key = self.qwen_api_key
         self.siliconflow_endpoint = (
             self.qwen_base_url if provider == "siliconflow" else DEFAULT_SILICONFLOW_BASE_URL
         )
         self._last_route_meta: Dict[str, Any] = {}
         self._default_route_label = "default"
+        self.last_grading_audit: Dict[str, Any] = {}
 
         # Initialize Moisture Calibrator
         self.moisture_calibrator = MoistureCalibrator()
@@ -427,6 +456,62 @@ class VisionRAGPipeline:
 
         return self.default_crop_hint, 0.45, "default"
 
+    def _with_operator_context(
+        self,
+        physics_proxies: Dict[str, Any],
+        selected_crop: Optional[str],
+        crop_variety: Optional[str],
+        measured_moisture_percent: Optional[float],
+        moisture_source: str,
+        moisture_ocr_confidence: Optional[float],
+    ) -> Dict[str, Any]:
+        """Attach operator-selected crop/variety and machine moisture to the audit context."""
+        enriched = dict(physics_proxies or {})
+        if selected_crop:
+            enriched["crop_type"] = selected_crop
+        if crop_variety:
+            enriched["crop_variety"] = crop_variety
+        if measured_moisture_percent is not None:
+            enriched["machine_moisture"] = {
+                "percent": float(measured_moisture_percent),
+                "source": moisture_source,
+                "ocr_confidence": moisture_ocr_confidence,
+            }
+        return enriched
+
+    def _risk_from_measured_moisture(
+        self,
+        moisture_percent: float,
+        crop_type: Optional[str],
+    ) -> MoistureRisk:
+        """Classify machine moisture against the selected crop's A/B/C thresholds."""
+        grade_a_max, grade_b_max, grade_c_max = self.rule_engine.moisture_thresholds(crop_type)
+        if moisture_percent <= grade_a_max:
+            return MoistureRisk.LOW
+        if moisture_percent <= grade_b_max:
+            return MoistureRisk.MODERATE
+        if moisture_percent <= grade_c_max:
+            return MoistureRisk.HIGH
+        return MoistureRisk.CRITICAL
+
+    def _resolve_moisture_measurement(
+        self,
+        physics_proxies: Dict[str, Any],
+        crop_type: Optional[str],
+        measured_moisture_percent: Optional[float] = None,
+    ) -> Tuple[MoistureRisk, float, bool]:
+        """Use meter moisture when available; otherwise fall back to grain-photo proxies."""
+        machine_moisture = physics_proxies.get("machine_moisture") or {}
+        resolved = (
+            measured_moisture_percent
+            if measured_moisture_percent is not None
+            else machine_moisture.get("percent")
+        )
+        if resolved is not None:
+            percent = float(resolved)
+            return self._risk_from_measured_moisture(percent, crop_type), percent, True
+        return self._estimate_moisture_risk(physics_proxies)
+
     def _chat_completions_endpoint(self, base_url: Optional[str] = None) -> str:
         base = (base_url or self.qwen_base_url or "").rstrip("/")
         if not base:
@@ -464,10 +549,14 @@ class VisionRAGPipeline:
         self,
         payload: Dict[str, Any],
         provider: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> Dict[str, Any]:
         route_provider = (provider or self.qwen_provider or "").strip().lower()
+        route_model = str(model or payload.get("model") or self.qwen_model or "").strip().lower()
         if route_provider in {"dashscope", "custom"}:
             payload["response_format"] = {"type": "json_object"}
+            if route_provider == "dashscope" and self._model_supports_thinking_toggle(route_model):
+                payload["enable_thinking"] = bool(self.qwen_enable_thinking)
         elif route_provider == "siliconflow":
             payload.update(
                 {
@@ -477,6 +566,72 @@ class VisionRAGPipeline:
                 }
             )
         return payload
+
+    def _model_supports_thinking_toggle(self, model: str) -> bool:
+        model_name = str(model or "").lower()
+        return (
+            model_name.startswith("qwen3-vl")
+            or model_name.startswith("qwen3.")
+            or model_name.startswith("qwen-plus")
+            or model_name.startswith("qwen-max")
+        )
+
+    def _format_cloud_error(self, exc: Exception) -> str:
+        if isinstance(exc, httpx.HTTPStatusError):
+            status = exc.response.status_code
+            body = (exc.response.text or "").strip()
+            body = " ".join(body.split())
+            if body:
+                return f"HTTP {status}: {body[:500]}"
+            return f"HTTP {status}: {exc.response.reason_phrase}"
+        return str(exc)
+
+    def _should_try_model_fallback(self, exc: Exception) -> bool:
+        if not isinstance(exc, httpx.HTTPStatusError):
+            return False
+        if exc.response.status_code not in {400, 404, 422}:
+            return False
+        detail = (exc.response.text or str(exc)).lower()
+        return "model" in detail and any(
+            marker in detail
+            for marker in (
+                "not found",
+                "not exist",
+                "does not exist",
+                "invalid",
+                "unsupported",
+                "not support",
+            )
+        )
+
+    def _fallback_routes_for_model(
+        self,
+        provider: str,
+        current_model: str,
+        base_url: str,
+        api_key: str,
+    ) -> List[Tuple[Dict[str, str], str]]:
+        if provider != "dashscope":
+            return []
+        seen = {str(current_model or "").strip().lower()}
+        fallbacks: List[Tuple[Dict[str, str], str]] = []
+        for model in self.qwen_fallback_models:
+            normalized = str(model or "").strip()
+            if not normalized or normalized.lower() in seen:
+                continue
+            seen.add(normalized.lower())
+            fallbacks.append(
+                (
+                    {
+                        "provider": provider,
+                        "model": normalized,
+                        "base_url": base_url,
+                        "api_key": api_key,
+                    },
+                    "model fallback",
+                )
+            )
+        return fallbacks
 
     def _resolve_route_signature(
         self,
@@ -619,6 +774,10 @@ class VisionRAGPipeline:
         image_path: str,
         physics_proxies: Dict[str, Any],
         crop_type: Optional[str] = None,
+        crop_variety: Optional[str] = None,
+        measured_moisture_percent: Optional[float] = None,
+        moisture_source: str = "grain_proxy",
+        moisture_ocr_confidence: Optional[float] = None,
     ) -> GradingResult:
         """
         Two-pass inference pipeline.
@@ -631,9 +790,18 @@ class VisionRAGPipeline:
             Complete GradingResult
         """
         timestamp = datetime.now(timezone.utc).isoformat()
+        self.last_grading_audit = {}
         selected_crop, selected_crop_confidence, selection_source = self._resolve_crop_selection(
             crop_type,
             physics_proxies=physics_proxies,
+        )
+        physics_proxies = self._with_operator_context(
+            physics_proxies,
+            selected_crop=selected_crop,
+            crop_variety=crop_variety,
+            measured_moisture_percent=measured_moisture_percent,
+            moisture_source=moisture_source,
+            moisture_ocr_confidence=moisture_ocr_confidence,
         )
         crop_route = self._resolve_crop_route(selected_crop)
 
@@ -647,26 +815,83 @@ class VisionRAGPipeline:
 
         if safety_finding.hazard_detected:
             logger.warning("Safety hazard detected: %s", safety_finding.hazard_type)
+            if measured_moisture_percent is not None:
+                safety_moisture_risk = self._risk_from_measured_moisture(
+                    float(measured_moisture_percent),
+                    selected_crop,
+                )
+                safety_moisture_percent = float(measured_moisture_percent)
+                safety_moisture_calibrated = True
+            else:
+                safety_moisture_risk = MoistureRisk.CRITICAL
+                safety_moisture_percent = None
+                safety_moisture_calibrated = False
+            safety_grain_score = 35
+            safety_moisture_score = {
+                MoistureRisk.LOW: 100,
+                MoistureRisk.MODERATE: 82,
+                MoistureRisk.HIGH: 65,
+                MoistureRisk.CRITICAL: 35,
+            }.get(safety_moisture_risk, 35)
+            safety_final_score = int(
+                max(20, min(74, min(safety_grain_score, safety_moisture_score) - 12))
+            )
+            safety_breakdown = {
+                "grain_grade": "C",
+                "grain_score": safety_grain_score,
+                "moisture_score": safety_moisture_score,
+                "final_score": safety_final_score,
+                "metrics": {
+                    "safety_gate": {
+                        "value": safety_finding.hazard_type,
+                        "grade": "REJECT",
+                        "score": safety_grain_score,
+                    }
+                },
+                "penalties": [
+                    {
+                        "name": "safety_hazard",
+                        "points": 12,
+                        "reason": f"Safety hazard detected: {safety_finding.hazard_type}",
+                    }
+                ],
+                "rule_source": "pass1_safety_gate",
+            }
+            self.last_grading_audit = {
+                "stage": "pass1_safety_gate",
+                "safety_finding": {
+                    "hazard_detected": safety_finding.hazard_detected,
+                    "hazard_type": safety_finding.hazard_type,
+                    "confidence": safety_finding.confidence,
+                    "bounding_boxes": safety_finding.bounding_boxes,
+                },
+                "score_breakdown": safety_breakdown,
+            }
             # Immediate Grade C + reject
             return GradingResult(
                 quality_grade=QualityGrade.C,
-                quality_score=25,
+                quality_score=safety_final_score,
                 reject_recommended=True,
                 reject_reasons=[f"Safety hazard detected: {safety_finding.hazard_type}"],
                 broken_grain_percent=0.0,
                 foreign_matter_percent=5.0,
                 uniformity_score=30,
                 mold_visible=(safety_finding.hazard_type == "mold"),
-                moisture_risk=MoistureRisk.CRITICAL,
-                moisture_estimate_calibrated=False,
-                moisture_percent_estimate=None,
+                moisture_risk=safety_moisture_risk,
+                moisture_estimate_calibrated=safety_moisture_calibrated,
+                moisture_percent_estimate=safety_moisture_percent,
                 overall_confidence=int(safety_finding.confidence * 100),
                 pass1_confidence=int(safety_finding.confidence * 100),
                 pass2_confidence=0,
                 timestamp=timestamp,
                 model_version=f"{self.qwen_provider}/{self.qwen_model}",
                 rag_chunks_used=0,
+                grain_quality_grade=QualityGrade.C,
+                grain_quality_score=safety_grain_score,
+                moisture_quality_score=safety_moisture_score,
+                score_breakdown=safety_breakdown,
                 selected_crop=selected_crop,
+                selected_variety=crop_variety or None,
                 selected_crop_confidence=selected_crop_confidence,
                 selection_source=selection_source,
                 route_label="default",
@@ -687,6 +912,9 @@ class VisionRAGPipeline:
                 operator_summary=f"Hold this lot. Safety gate flagged {safety_finding.hazard_type}.",
                 manual_review_required=True,
                 signal_highlights=[f"Safety gate detected {safety_finding.hazard_type}"],
+                measured_moisture_percent=measured_moisture_percent,
+                moisture_source=moisture_source,
+                moisture_ocr_confidence=moisture_ocr_confidence,
             )
 
         # PASS 2: RAG-Guided Quality & Moisture Grading
@@ -697,9 +925,13 @@ class VisionRAGPipeline:
             timestamp,
             crop_type=selected_crop,
             selected_crop=selected_crop,
+            selected_variety=crop_variety,
             selected_crop_confidence=selected_crop_confidence,
             selection_source=selection_source,
             crop_route=crop_route,
+            measured_moisture_percent=measured_moisture_percent,
+            moisture_source=moisture_source,
+            moisture_ocr_confidence=moisture_ocr_confidence,
         )
 
         return grading_result
@@ -708,7 +940,7 @@ class VisionRAGPipeline:
         self,
         physics_proxies: Dict[str, Any],
     ) -> Tuple[MoistureRisk, float, bool]:
-        """Public read-only wrapper used by Streamlit to render proxy results before VLM inference."""
+        """Public read-only wrapper used by clients to render proxy results before VLM inference."""
         return self._estimate_moisture_risk(physics_proxies)
 
     async def infer_async(
@@ -716,15 +948,27 @@ class VisionRAGPipeline:
         image_path: str,
         physics_proxies: Dict[str, Any],
         crop_type: Optional[str] = None,
+        crop_variety: Optional[str] = None,
+        measured_moisture_percent: Optional[float] = None,
+        moisture_source: str = "grain_proxy",
+        moisture_ocr_confidence: Optional[float] = None,
         stream_callback: Optional[Callable[[str], Any]] = None,
     ) -> GradingResult:
         """
-        Async inference entrypoint for Streamlit.
+        Async inference entrypoint for web clients.
 
-        Streamlit still runs the script top-to-bottom; the cloud HTTP work is
-        moved to a worker thread so the UI wrapper can remain async-friendly.
+        The cloud HTTP work is moved to a worker thread so the wrapper can remain async-friendly.
         """
-        return await asyncio.to_thread(self.infer, image_path, physics_proxies, crop_type)
+        return await asyncio.to_thread(
+            self.infer,
+            image_path,
+            physics_proxies,
+            crop_type,
+            crop_variety,
+            measured_moisture_percent,
+            moisture_source,
+            moisture_ocr_confidence,
+        )
 
     def _pass1_safety_gate(
         self,
@@ -797,9 +1041,13 @@ Respond in JSON format:
         timestamp: str,
         crop_type: Optional[str] = None,
         selected_crop: Optional[str] = None,
+        selected_variety: Optional[str] = None,
         selected_crop_confidence: float = 0.0,
         selection_source: str = "default",
         crop_route: Optional[Dict[str, str]] = None,
+        measured_moisture_percent: Optional[float] = None,
+        moisture_source: str = "grain_proxy",
+        moisture_ocr_confidence: Optional[float] = None,
     ) -> GradingResult:
         """
         Pass 2: RAG-guided quality and moisture grading.
@@ -807,7 +1055,11 @@ Respond in JSON format:
         """
         try:
             # 1. Retrieve relevant RAG chunks
-            rag_context = self._retrieve_rag_context(physics_proxies, crop_type=crop_type)
+            rag_context = self._retrieve_rag_context(
+                physics_proxies,
+                crop_type=crop_type,
+                crop_variety=selected_variety,
+            )
             feedback_context = self._retrieve_feedback_context(
                 physics_proxies,
                 crop_type=selected_crop,
@@ -815,7 +1067,13 @@ Respond in JSON format:
 
             # 2. Build comprehensive grading prompt
             grading_prompt = self._build_grading_prompt(
-                physics_proxies, rag_context, feedback_context, selected_crop=selected_crop
+                physics_proxies,
+                rag_context,
+                feedback_context,
+                selected_crop=selected_crop,
+                selected_variety=selected_variety,
+                measured_moisture_percent=measured_moisture_percent,
+                moisture_source=moisture_source,
             )
 
             # 3. Call Qwen-VL with image and prompt
@@ -827,13 +1085,13 @@ Respond in JSON format:
                 crop_route=crop_route,
                 include_route_metadata=True,
             )
+            repair_source = (
+                str(self._last_message_meta.get("content") or "").strip()
+                or str(self._last_message_meta.get("reasoning") or "").strip()
+                or str(response).strip()
+            )
             response_json = self._parse_json_response(response)
             if not response_json:
-                repair_source = (
-                    str(self._last_message_meta.get("content") or "").strip()
-                    or str(self._last_message_meta.get("reasoning") or "").strip()
-                    or str(response).strip()
-                )
                 response_json = self._repair_grading_json(
                     repair_source,
                     physics_proxies,
@@ -843,9 +1101,18 @@ Respond in JSON format:
                     response_json = self._extract_grading_hints_from_text(
                         repair_source, physics_proxies
                     )
+            recovered_fields = self._recover_grading_fields_from_text(repair_source)
+            response_json = self._merge_recovered_grading_fields(
+                response_json,
+                recovered_fields,
+            )
 
-            # 4. Compute moisture risk and calibrated percentage from physics proxies
-            moisture_risk, moisture_percent, is_calib = self._estimate_moisture_risk(physics_proxies)
+            # 4. Resolve moisture from the machine reading when present, otherwise use image proxies.
+            moisture_risk, moisture_percent, is_calib = self._resolve_moisture_measurement(
+                physics_proxies,
+                crop_type=selected_crop,
+                measured_moisture_percent=measured_moisture_percent,
+            )
 
             # 5. Parse response and apply deterministic threshold rules
             grade = self._apply_grading_logic(
@@ -868,9 +1135,6 @@ Respond in JSON format:
             if moisture_risk == MoistureRisk.CRITICAL:
                 reject_recommended = True
                 reject_reasons.append("Critical moisture risk; dry immediately before storage")
-            elif moisture_risk == MoistureRisk.HIGH and grade["grade"] == QualityGrade.C:
-                reject_recommended = True
-                reject_reasons.append("High moisture plus low-quality evidence; hold before storage")
             applied_rules = self._build_applied_rules(
                 grade.get("rule_hits", []),
                 rag_context,
@@ -912,6 +1176,28 @@ Respond in JSON format:
                 or moisture_risk in {MoistureRisk.HIGH, MoistureRisk.CRITICAL}
                 or route_failed
             )
+            self.last_grading_audit = {
+                "stage": "pass2_rag_grading",
+                "raw_model_response": response,
+                "parsed_model_response": response_json,
+                "route_meta": {
+                    "route_label": route_meta.get("route_label", self._default_route_label),
+                    "provider": route_meta.get("provider"),
+                    "model": route_meta.get("model"),
+                    "base_url": route_meta.get("base_url"),
+                    "fallback_used": bool(route_meta.get("fallback_used")),
+                    "attempted_routes": route_meta.get("attempted_routes") or [],
+                    "error": route_meta.get("error"),
+                },
+                "rag_context": rag_context,
+                "feedback_context": feedback_context,
+                "rule_decision": grade,
+                "moisture": {
+                    "risk": moisture_risk.value,
+                    "percent": moisture_percent,
+                    "calibrated": is_calib,
+                },
+            }
 
             return GradingResult(
                 quality_grade=grade["grade"],
@@ -934,7 +1220,12 @@ Respond in JSON format:
                     f"{route_meta.get('model', self.qwen_model)}"
                 ),
                 rag_chunks_used=len(rag_context),
+                grain_quality_grade=grade["grain_grade"],
+                grain_quality_score=grade["grain_score"],
+                moisture_quality_score=grade["moisture_score"],
+                score_breakdown=grade["score_breakdown"],
                 selected_crop=selected_crop,
+                selected_variety=selected_variety or None,
                 selected_crop_confidence=selected_crop_confidence,
                 selection_source=selection_source,
                 route_label=route_meta.get("route_label", self._default_route_label),
@@ -948,6 +1239,9 @@ Respond in JSON format:
                 operator_summary=operator_summary,
                 manual_review_required=manual_review_required,
                 signal_highlights=signal_highlights,
+                measured_moisture_percent=measured_moisture_percent,
+                moisture_source=moisture_source,
+                moisture_ocr_confidence=moisture_ocr_confidence,
             )
 
         except Exception as e:
@@ -957,15 +1251,20 @@ Respond in JSON format:
                 physics_proxies,
                 timestamp,
                 selected_crop=selected_crop,
+                selected_variety=selected_variety,
                 selected_crop_confidence=selected_crop_confidence,
                 selection_source=selection_source,
                 route_meta=self._last_route_meta,
+                measured_moisture_percent=measured_moisture_percent,
+                moisture_source=moisture_source,
+                moisture_ocr_confidence=moisture_ocr_confidence,
             )
 
     def _build_rag_query(
         self,
         physics_proxies: Dict[str, Any],
         crop_type: Optional[str] = None,
+        crop_variety: Optional[str] = None,
     ) -> str:
         """Create a retrieval query that reflects the current sample signals."""
         query_parts = [
@@ -998,6 +1297,11 @@ Respond in JSON format:
         if normalized_crop:
             crop_context = self._crop_prompt_context(normalized_crop)
             query_parts.append(f"crop-specific grading for {crop_context['ruleset_hint']}")
+        if crop_variety:
+            query_parts.append(f"variety-specific grading context {crop_variety}")
+        machine_moisture = (physics_proxies.get("machine_moisture") or {}).get("percent")
+        if machine_moisture is not None:
+            query_parts.append(f"machine measured moisture {machine_moisture}% grade thresholds")
 
         return " ".join(query_parts)
 
@@ -1019,11 +1323,16 @@ Respond in JSON format:
         self,
         physics_proxies: Dict[str, Any],
         crop_type: Optional[str] = None,
+        crop_variety: Optional[str] = None,
         k: int = 4,
     ) -> List[Dict[str, Any]]:
         """Retrieve authoritative chunks relevant to the sample's proxy profile."""
         normalized_crop = self._normalize_crop_hint(crop_type)
-        query = self._build_rag_query(physics_proxies, crop_type=normalized_crop)
+        query = self._build_rag_query(
+            physics_proxies,
+            crop_type=normalized_crop,
+            crop_variety=crop_variety,
+        )
         candidates = self.rag_engine.retrieve(query, k=max(k, 8))
         if not normalized_crop:
             return candidates[:k]
@@ -1064,6 +1373,9 @@ Respond in JSON format:
         rag_context: List[Dict[str, Any]],
         feedback_context: List[Dict[str, Any]],
         selected_crop: Optional[str] = None,
+        selected_variety: Optional[str] = None,
+        measured_moisture_percent: Optional[float] = None,
+        moisture_source: str = "grain_proxy",
     ) -> str:
         """Build comprehensive grading prompt with physics context and RAG rules."""
         context_str = self._compress_rag_context(rag_context)
@@ -1072,16 +1384,33 @@ Respond in JSON format:
         crop_name = crop_context["crop_display"]
         ruleset_hint = crop_context["ruleset_hint"]
         crop_rule_summary = self._crop_rule_summary(selected_crop)
+        variety_line = (
+            f"- Selected variety: {selected_variety}"
+            if selected_variety
+            else "- Selected variety: not specified"
+        )
+        if measured_moisture_percent is not None:
+            moisture_line = (
+                f"- Authoritative moisture meter reading: {measured_moisture_percent:.2f}% "
+                f"(source={moisture_source}). Use this value for moisture thresholds."
+            )
+        else:
+            moisture_line = (
+                "- No moisture meter reading was supplied; use image moisture proxies only as an estimate."
+            )
 
         prompt = f"""Grade this {crop_name} batch. Return ONLY one JSON object with no prose.
 
 Rules:
 - Apply FAO/BIS-aligned {ruleset_hint} thresholds from the retrieved rule anchors.
 - Hazard, mold, insects, stones, deleterious material, or metrics beyond Grade C => Grade C/reject.
-- Moisture and crop-specific defect thresholds override the image model.
+- Machine moisture reading and crop-specific defect thresholds override the image model.
 - Grade A only if the lot is very uniform, clean, and physics signals are dry/stable.
 - If the batch looks mixed, bimodal, or moisture-heavy, prefer Grade C.
 - Grade B is only for usable commercial lots without strong hazard or moisture signals.
+- Choose exactly one final grade from A, B, or C.
+{variety_line}
+{moisture_line}
 
 Crop YAML thresholds:
 {crop_rule_summary}
@@ -1099,6 +1428,7 @@ Signals:
 - texture_entropy={physics_proxies['texture_entropy']:.2f}
 - roughness_score={physics_proxies['roughness_score']:.1f}
 - mask_coverage={physics_proxies['grain_mask_coverage']:.2%}
+- machine_moisture_percent={measured_moisture_percent if measured_moisture_percent is not None else "not supplied"}
 
 JSON schema:
 {{
@@ -1121,6 +1451,7 @@ JSON schema:
   "size_uniformity_score": 0-100,
   "shape_uniformity_score": 0-100,
   "surface_defects_percent": 0-100,
+  "measured_moisture_percent": number|null,
   "bimodal_color_detected": true,
   "mold_visible": false,
   "visible_defects": ["short labels"],
@@ -1218,7 +1549,7 @@ JSON schema:
                     "max_tokens": max_tokens,
                     "temperature": 0.1,
                 }
-                payload = self._openai_payload_options(payload, provider=provider)
+                payload = self._openai_payload_options(payload, provider=provider, model=model)
 
                 try:
                     with httpx.Client(timeout=self.qwen_timeout_seconds) as client:
@@ -1323,7 +1654,7 @@ JSON schema:
         stream_callback: Callable[[str], Any],
         text: str,
     ) -> None:
-        """Invoke a Streamlit placeholder callback without assuming it is sync or async."""
+        """Invoke a streaming callback without assuming it is sync or async."""
         result = stream_callback(text)
         if inspect.isawaitable(result):
             await result
@@ -1336,7 +1667,7 @@ JSON schema:
         status: str,
         detail: Optional[str] = None,
     ) -> None:
-        """Send a final structured decision snapshot to Streamlit's live JSON block."""
+        """Send a final structured decision snapshot to a live JSON callback."""
         if stream_callback is None:
             return
         payload: Dict[str, Any] = {
@@ -1395,7 +1726,12 @@ JSON schema:
 
         attempted_routes: List[Dict[str, Any]] = []
         last_error: Optional[Exception] = None
-        for route, route_label in route_candidates:
+        last_error_text = ""
+        queued_fallback_signatures = set()
+        route_index = 0
+        while route_index < len(route_candidates):
+            route, route_label = route_candidates[route_index]
+            route_index += 1
             provider, model, base_url, route_api_key = self._resolve_route_signature(route)
             route_record = {
                 "route_label": route_label,
@@ -1409,7 +1745,8 @@ JSON schema:
                 endpoint = self._chat_completions_endpoint(base_url=base_url)
             except ValueError as exc:
                 last_error = exc
-                route_record["error"] = str(exc)
+                last_error_text = self._format_cloud_error(exc)
+                route_record["error"] = last_error_text
                 logger.warning(
                     "Skipping route %s due to endpoint config error: %s",
                     route_label,
@@ -1443,7 +1780,7 @@ JSON schema:
                 "top_p": 0.8,
                 "stream": False,
             }
-            payload = self._openai_payload_options(payload, provider=provider)
+            payload = self._openai_payload_options(payload, provider=provider, model=model)
             try:
                 with httpx.Client(timeout=self.qwen_timeout_seconds) as client:
                     response = client.post(endpoint, headers=headers, json=payload)
@@ -1463,8 +1800,9 @@ JSON schema:
                     "provider": provider,
                     "model": model,
                     "base_url": base_url,
-                    "fallback_used": route_label == "default" and any(
-                        item.get("route_label") == "crop route" for item in attempted_routes
+                    "fallback_used": route_label == "model fallback" or (
+                        route_label == "default"
+                        and any(item.get("route_label") == "crop route" for item in attempted_routes)
                     ),
                     "attempted_routes": [
                         f"{r['route_label']}:{r['provider']}/{r['model']}@{r['base_url']}"
@@ -1485,20 +1823,39 @@ JSON schema:
                 return final_text
             except Exception as exc:
                 last_error = exc
-                route_record["error"] = str(exc)
+                last_error_text = self._format_cloud_error(exc)
+                route_record["error"] = last_error_text
                 logger.warning(
                     "Qwen-VL API call failed via %s route (%s/%s): %s",
                     route_label,
                     provider,
                     model,
-                    exc,
+                    last_error_text,
                 )
-                if route is not None:
+                if route_label == "crop route":
                     logger.warning("Falling back to default Qwen route.")
+                if route_label == "default" and self._should_try_model_fallback(exc):
+                    for fallback_route, fallback_label in self._fallback_routes_for_model(
+                        provider,
+                        model,
+                        base_url,
+                        route_api_key,
+                    ):
+                        signature = self._route_signature(fallback_route)
+                        if signature in queued_fallback_signatures:
+                            continue
+                        queued_fallback_signatures.add(signature)
+                        route_candidates.append((fallback_route, fallback_label))
+                    if queued_fallback_signatures:
+                        route_record["fallback_models_queued"] = [
+                            signature[1] for signature in queued_fallback_signatures
+                        ]
+                        logger.warning("Trying configured Qwen fallback model route(s).")
                 continue
 
         if last_error is None:
             last_error = RuntimeError("No Qwen route succeeded.")
+            last_error_text = str(last_error)
         error_meta = {
             "route_label": self._default_route_label,
             "provider": self.qwen_provider,
@@ -1510,10 +1867,10 @@ JSON schema:
                 for r in attempted_routes
             ],
             "route": {},
-            "error": str(last_error),
+            "error": last_error_text or str(last_error),
         }
         self._last_route_meta = error_meta
-        logger.error("Qwen-VL API call failed: %s", last_error)
+        logger.error("Qwen-VL API call failed: %s", error_meta["error"])
         if include_route_metadata:
             return "", error_meta
         raise last_error
@@ -1549,6 +1906,106 @@ JSON schema:
             logger.error(f"JSON parse error: {e}")
             return {}
 
+    def _recover_grading_fields_from_text(self, raw_text: str) -> Dict[str, Any]:
+        """Recover scalar grading fields from malformed JSON-like model text."""
+        import re
+
+        text = str(raw_text or "")
+        if not text:
+            return {}
+
+        numeric_keys = {
+            "quality_score",
+            "off_tone_fraction",
+            "size_deviation",
+            "shape_defect_fraction",
+            "broken_grain_percent",
+            "broken_grains_percent",
+            "damaged_grains_percent",
+            "chalky_grains_percent",
+            "foreign_matter_percent",
+            "organic_extraneous_matter_percent",
+            "inorganic_extraneous_matter_percent",
+            "other_edible_grains_percent",
+            "immature_grains_percent",
+            "weevilled_grains_percent",
+            "color_uniformity_score",
+            "size_uniformity_score",
+            "shape_uniformity_score",
+            "surface_defects_percent",
+            "measured_moisture_percent",
+            "model_confidence",
+        }
+        recovered: Dict[str, Any] = {}
+        for key in numeric_keys:
+            match = re.search(
+                rf'"{re.escape(key)}"\s*:\s*(-?\d+(?:\.\d+)?)',
+                text,
+                flags=re.IGNORECASE,
+            )
+            if match:
+                number = float(match.group(1))
+                recovered[key] = int(number) if number.is_integer() else number
+
+        for key in ("bimodal_color_detected", "mold_visible"):
+            match = re.search(
+                rf'"{re.escape(key)}"\s*:\s*(true|false)',
+                text,
+                flags=re.IGNORECASE,
+            )
+            if match:
+                recovered[key] = match.group(1).lower() == "true"
+
+        grade_match = re.search(
+            r'"quality_grade"\s*:\s*"([ABCabc])"',
+            text,
+            flags=re.IGNORECASE,
+        )
+        if grade_match:
+            recovered["quality_grade"] = grade_match.group(1).upper()
+
+        defects_match = re.search(
+            r'"visible_defects"\s*:\s*\[([^\]]*)\]',
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if defects_match:
+            recovered["visible_defects"] = [
+                item.strip()
+                for item in re.findall(r'"([^"]+)"', defects_match.group(1))
+                if item.strip()
+            ]
+
+        return recovered
+
+    def _merge_recovered_grading_fields(
+        self,
+        response_json: Dict[str, Any],
+        recovered_fields: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Prefer explicit quoted fields recovered from malformed model JSON."""
+        if not recovered_fields:
+            return response_json
+
+        merged = dict(response_json or {})
+        merged.update(recovered_fields)
+
+        if recovered_fields.get("mold_visible") is False:
+            visible_defects = merged.get("visible_defects", [])
+            if isinstance(visible_defects, str):
+                visible_defects = [visible_defects]
+            if isinstance(visible_defects, list):
+                merged["visible_defects"] = [
+                    defect
+                    for defect in visible_defects
+                    if not any(
+                        term in str(defect).lower()
+                        for term in ("mold", "mould", "fungus", "fungal")
+                    )
+                ]
+
+        return merged
+
     def _repair_grading_json(
         self,
         raw_text: str,
@@ -1563,8 +2020,12 @@ JSON schema:
 Required keys:
 quality_grade, quality_score, off_tone_fraction, size_deviation,
 shape_defect_fraction, broken_grain_percent, foreign_matter_percent,
-other_edible_grains_percent, bimodal_color_detected, mold_visible,
-visible_defects, model_confidence, brief_reason
+other_edible_grains_percent, broken_grains_percent, damaged_grains_percent,
+chalky_grains_percent, organic_extraneous_matter_percent,
+inorganic_extraneous_matter_percent, immature_grains_percent,
+weevilled_grains_percent, color_uniformity_score, size_uniformity_score,
+shape_uniformity_score, surface_defects_percent, bimodal_color_detected,
+mold_visible, visible_defects, model_confidence, brief_reason
 
 Use conservative values if uncertain.
 Signals: darkness_index={physics_proxies['lab_features']['color_darkness_index']:.1f}, clumping_density={physics_proxies['clumping']['density']:.3f}, uniformity_score={physics_proxies['uniformity_score']:.1f}, texture_entropy={physics_proxies['texture_entropy']:.2f}
@@ -1584,11 +2045,16 @@ Notes:
         physics_proxies: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Heuristic backup when the cloud model returns reasoning text without final JSON."""
+        import re
+
         text = str(raw_text or "").lower()
         if not text:
             return {}
         if not any(ch.isalpha() for ch in text):
             return {}
+        recovered_fields = self._recover_grading_fields_from_text(raw_text)
+        scan_text = re.sub(r'"[a-zA-Z_][a-zA-Z0-9_]*"\s*:', " ", text)
+        scan_text = re.sub(r"\b(mold_visible|visible_defects)\b", " ", scan_text)
 
         grade = "B"
         if "grade c" in text or "-> grade c" in text or "grade=c" in text:
@@ -1596,14 +2062,48 @@ Notes:
         elif "grade a" in text or "-> grade a" in text or "grade=a" in text:
             grade = "A"
 
-        visible_defects: List[str] = []
-        for defect in ("mold", "stone", "insect", "webbing", "clumping", "shriveled", "mixed"):
-            if defect in text:
-                visible_defects.append(defect)
+        visible_defects = [
+            str(item).strip().lower()
+            for item in recovered_fields.get("visible_defects", [])
+            if str(item).strip()
+        ]
+        if not visible_defects:
+            for defect in ("mold", "stone", "insect", "webbing", "clumping", "shriveled", "mixed"):
+                if re.search(rf"\b{re.escape(defect)}\b", scan_text):
+                    visible_defects.append(defect)
 
-        bimodal = "bimodal" in text or "mixed batch" in text or "two clearly distinct tones" in text
-        mold_visible = "mold" in text and "no mold" not in text
-        foreign_matter = 4.0 if ("foreign matter >1" in text or "stones" in text or "debris" in text) else 0.5
+        bimodal = "bimodal" in scan_text or "mixed batch" in scan_text or "two clearly distinct tones" in scan_text
+        if "bimodal_color_detected" in recovered_fields:
+            bimodal = bool(recovered_fields["bimodal_color_detected"])
+
+        if "mold_visible" in recovered_fields:
+            mold_visible = bool(recovered_fields["mold_visible"])
+        else:
+            no_mold = re.search(
+                r"\b(no|none|not|without|absent|free of)\s+(visible\s+)?(mold|mould|fungus|fungal)\b",
+                scan_text,
+            )
+            mold_visible = (
+                "mold" in visible_defects
+                or "mould" in visible_defects
+                or bool(re.search(r"\b(mold|mould|fungus|fungal)\b", scan_text) and not no_mold)
+            )
+        if not mold_visible:
+            visible_defects = [
+                defect
+                for defect in visible_defects
+                if not any(term in defect for term in ("mold", "mould", "fung"))
+            ]
+
+        if recovered_fields.get("quality_grade") in {"A", "B", "C"}:
+            grade = str(recovered_fields["quality_grade"])
+        foreign_matter = float(recovered_fields.get("foreign_matter_percent", 0.5))
+        if "foreign_matter_percent" not in recovered_fields:
+            foreign_matter = (
+                4.0
+                if ("foreign matter >1" in scan_text or "stones" in scan_text or "debris" in scan_text)
+                else 0.5
+            )
 
         clumping = float(physics_proxies.get("clumping", {}).get("density", 0.0))
         darkness = float(
@@ -1659,6 +2159,10 @@ Notes:
             "uniformity": decision.uniformity,
             "mold_visible": decision.mold_visible,
             "rule_hits": decision.rule_hits,
+            "grain_grade": QualityGrade(decision.grain_grade),
+            "grain_score": decision.grain_score,
+            "moisture_score": decision.moisture_score,
+            "score_breakdown": decision.score_breakdown,
         }
 
     def _estimate_moisture_risk(self, physics_proxies: Dict[str, Any]) -> Tuple[MoistureRisk, float, bool]:
@@ -1760,6 +2264,8 @@ Notes:
         )
         if calibration_conf > 0:
             overall += 0.05 * (calibration_conf * 100.0)
+        if (physics_proxies.get("machine_moisture") or {}).get("percent") is not None:
+            overall += 4.0
         return int(np.clip(overall, 0, 100))
 
     def _fallback_grading(
@@ -1767,13 +2273,21 @@ Notes:
         physics_proxies: Dict[str, Any],
         timestamp: str,
         selected_crop: Optional[str] = None,
+        selected_variety: Optional[str] = None,
         selected_crop_confidence: float = 0.0,
         selection_source: str = "default",
         route_meta: Optional[Dict[str, Any]] = None,
+        measured_moisture_percent: Optional[float] = None,
+        moisture_source: str = "grain_proxy",
+        moisture_ocr_confidence: Optional[float] = None,
     ) -> GradingResult:
         """Fallback grading when LLM inference fails."""
 
-        moisture_risk, moisture_percent, is_calib = self._estimate_moisture_risk(physics_proxies)
+        moisture_risk, moisture_percent, is_calib = self._resolve_moisture_measurement(
+            physics_proxies,
+            crop_type=selected_crop,
+            measured_moisture_percent=measured_moisture_percent,
+        )
         darkness = float(physics_proxies.get("lab_features", {}).get("color_darkness_index", 0.0))
         clumping = float(physics_proxies.get("clumping", {}).get("density", 0.0))
         uniformity = float(physics_proxies.get("uniformity_score", 70.0))
@@ -1839,9 +2353,6 @@ Notes:
         if moisture_risk == MoistureRisk.CRITICAL:
             reject_recommended = True
             reject_reasons.append("Critical moisture risk; dry immediately before storage")
-        elif moisture_risk == MoistureRisk.HIGH and grade["grade"] == QualityGrade.C:
-            reject_recommended = True
-            reject_reasons.append("High moisture plus low-quality proxy evidence; hold before storage")
         elif grade["grade"] == QualityGrade.C and not reject_reasons:
             reject_reasons.extend(
                 self._build_proxy_fastpath_reasons(
@@ -1883,6 +2394,17 @@ Notes:
             },
             ]
         )
+        self.last_grading_audit = {
+            "stage": "deterministic_fallback",
+            "route_meta": route_meta or {},
+            "rule_decision": grade,
+            "score_breakdown": grade.get("score_breakdown", {}),
+            "moisture": {
+                "risk": moisture_risk.value,
+                "percent": moisture_percent,
+                "calibrated": is_calib,
+            },
+        }
 
         return GradingResult(
             quality_grade=grade["grade"],
@@ -1902,7 +2424,12 @@ Notes:
             timestamp=timestamp,
             model_version=f"{self._fallback_route_label(route_meta)}",
             rag_chunks_used=0,
+            grain_quality_grade=grade["grain_grade"],
+            grain_quality_score=grade["grain_score"],
+            moisture_quality_score=grade["moisture_score"],
+            score_breakdown=grade["score_breakdown"],
             selected_crop=selected_crop,
+            selected_variety=selected_variety or None,
             selected_crop_confidence=selected_crop_confidence,
             selection_source=selection_source,
             route_label=(route_meta or {}).get("route_label", self._default_route_label),
@@ -1916,6 +2443,9 @@ Notes:
             operator_summary=operator_summary,
             manual_review_required=True,
             signal_highlights=signal_highlights,
+            measured_moisture_percent=measured_moisture_percent,
+            moisture_source=moisture_source,
+            moisture_ocr_confidence=moisture_ocr_confidence,
         )
 
     def _fallback_route_label(self, route_meta: Optional[Dict[str, Any]]) -> str:
@@ -1936,7 +2466,12 @@ Notes:
         uniformity = float(physics_proxies.get("uniformity_score", 0.0))
         entropy = float(physics_proxies.get("texture_entropy", 0.0))
         physical = physics_proxies.get("physical_properties", {}) or {}
+        machine_moisture = physics_proxies.get("machine_moisture") or {}
         highlights: List[str] = [f"Moisture risk: {moisture_risk.value}"]
+        if machine_moisture.get("percent") is not None:
+            highlights.append(
+                f"Machine moisture: {float(machine_moisture.get('percent')):.2f}%"
+            )
         if clumping > 0.18:
             highlights.append(f"Clumping is elevated ({clumping:.3f})")
         if darkness > 50:
@@ -2039,7 +2574,11 @@ Notes:
         return {
             "quality": {
                 "grade": grading_result.quality_grade.value,
+                "grain_grade": grading_result.grain_quality_grade.value,
                 "score": grading_result.quality_score,
+                "grain_score": grading_result.grain_quality_score,
+                "moisture_score": grading_result.moisture_quality_score,
+                "score_breakdown": grading_result.score_breakdown,
                 "reject_recommended": grading_result.reject_recommended,
                 "reject_reasons": grading_result.reject_reasons,
                 "broken_grain_percent": grading_result.broken_grain_percent,
@@ -2050,6 +2589,9 @@ Notes:
             "moisture": {
                 "risk_level": grading_result.moisture_risk.value,
                 "percent_estimate": grading_result.moisture_percent_estimate,
+                "machine_percent": grading_result.measured_moisture_percent,
+                "source": grading_result.moisture_source,
+                "ocr_confidence": grading_result.moisture_ocr_confidence,
                 "calibrated": grading_result.moisture_estimate_calibrated,
             },
             "confidence": {
@@ -2059,6 +2601,7 @@ Notes:
             },
             "selection": {
                 "selected_crop": grading_result.selected_crop,
+                "selected_variety": grading_result.selected_variety,
                 "selected_crop_confidence": grading_result.selected_crop_confidence,
                 "selection_source": grading_result.selection_source,
             },

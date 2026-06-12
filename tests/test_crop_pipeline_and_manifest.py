@@ -87,14 +87,20 @@ def test_infer_carries_crop_metadata_into_result(tmp_path):
             timestamp: str,
             crop_type=None,
             selected_crop=None,
+            selected_variety=None,
             selected_crop_confidence=0.0,
             selection_source: str = "default",
             crop_route=None,
+            measured_moisture_percent=None,
+            moisture_source: str = "grain_proxy",
+            moisture_ocr_confidence=None,
         ):
             assert crop_type == "rice"
             assert selected_crop == "rice"
+            assert selected_variety == "Basmati"
             assert selected_crop_confidence == 1.0
             assert selection_source == "manual"
+            assert measured_moisture_percent == 12.4
             return GradingResult(
                 quality_grade=QualityGrade.B,
                 quality_score=82,
@@ -114,8 +120,12 @@ def test_infer_carries_crop_metadata_into_result(tmp_path):
                 model_version="qwen3-vl-plus",
                 rag_chunks_used=4,
                 selected_crop=selected_crop,
+                selected_variety=selected_variety,
                 selected_crop_confidence=selected_crop_confidence,
                 selection_source=selection_source,
+                measured_moisture_percent=measured_moisture_percent,
+                moisture_source=moisture_source,
+                moisture_ocr_confidence=moisture_ocr_confidence,
                 applied_rules=[
                     {
                         "rule_id": "manual_crop_hint",
@@ -134,10 +144,20 @@ def test_infer_carries_crop_metadata_into_result(tmp_path):
         )()
         pipeline._pass2_rag_grading = _fake_pass2
 
-        result = pipeline.infer(str(image_path), proxy, crop_type="RICE")
+        result = pipeline.infer(
+            str(image_path),
+            proxy,
+            crop_type="RICE",
+            crop_variety="Basmati",
+            measured_moisture_percent=12.4,
+            moisture_source="moisture_meter_ocr",
+            moisture_ocr_confidence=0.9,
+        )
 
         assert result.selected_crop == "rice"
+        assert result.selected_variety == "Basmati"
         assert result.selection_source == "manual"
+        assert result.measured_moisture_percent == 12.4
         assert result.selected_crop_confidence == 1.0
         assert isinstance(result.applied_rules, list)
         assert len(result.applied_rules) == 1
@@ -243,6 +263,78 @@ def test_crop_prompt_includes_crop_context_in_rag_prompt():
         in pipeline._build_grading_prompt(_fake_physics_proxies(), rag_context, feedback_context, selected_crop=None)
         .lower()
     )
+
+
+def test_crop_prompt_includes_variety_and_machine_moisture():
+    pipeline = VisionRAGPipeline(
+        qwen_provider="dashscope",
+        qwen_model="qwen3-vl-plus",
+        qwen_base_url="https://example.test/compatible-mode/v1",
+        qwen_api_key="test-token",
+        rag_retrieval_mode="lexical",
+    )
+
+    prompt = pipeline._build_grading_prompt(
+        _fake_physics_proxies(),
+        [],
+        [],
+        selected_crop="rice",
+        selected_variety="Basmati",
+        measured_moisture_percent=13.6,
+        moisture_source="moisture_meter_ocr",
+    )
+
+    assert "Selected variety: Basmati" in prompt
+    assert "Authoritative moisture meter reading: 13.60%" in prompt
+    assert "Choose exactly one final grade from A, B, or C" in prompt
+
+
+def test_measured_moisture_overrides_visual_proxy_for_crop_rules():
+    pipeline = VisionRAGPipeline(
+        qwen_provider="dashscope",
+        qwen_model="qwen3-vl-plus",
+        qwen_base_url="https://example.test/compatible-mode/v1",
+        qwen_api_key="test-token",
+        rag_retrieval_mode="lexical",
+    )
+    response_json = {
+        "quality_grade": "A",
+        "broken_grains_percent": 1.0,
+        "damaged_grains_percent": 0.5,
+        "chalky_grains_percent": 0.5,
+        "foreign_matter_percent": 0.05,
+        "color_uniformity_score": 96.0,
+        "size_uniformity_score": 93.0,
+        "shape_uniformity_score": 92.0,
+        "surface_defects_percent": 1.0,
+        "mold_visible": False,
+        "visible_defects": [],
+    }
+    proxies = pipeline._with_operator_context(
+        _fake_physics_proxies(),
+        selected_crop="rice",
+        crop_variety="Basmati",
+        measured_moisture_percent=13.6,
+        moisture_source="moisture_meter_ocr",
+        moisture_ocr_confidence=0.94,
+    )
+    moisture_risk, moisture_percent, is_calibrated = pipeline._resolve_moisture_measurement(
+        proxies,
+        crop_type="rice",
+    )
+    grade = pipeline._apply_grading_logic(
+        response_json,
+        proxies,
+        moisture_risk=moisture_risk,
+        moisture_percent=moisture_percent,
+        moisture_calibrated=is_calibrated,
+        crop_type="rice",
+    )
+
+    assert moisture_risk == MoistureRisk.HIGH
+    assert moisture_percent == 13.6
+    assert grade["grade"] == QualityGrade.C
+    assert "rice_moisture_c" in grade["rule_hits"]
 
 
 def test_fallback_grading_uses_crop_yaml_rule_path():
@@ -439,6 +531,69 @@ def test_repair_grading_json_uses_crop_route(monkeypatch):
     )
     assert captured["crop_route"] == expected_route
     assert result["quality_grade"] == "A"
+
+
+def test_recover_grading_fields_preserves_rice_specific_metrics_from_malformed_json():
+    pipeline = VisionRAGPipeline(rag_retrieval_mode="lexical")
+    raw_text = """
+    {
+      "quality_grade": "B",
+      "quality_score": 72,
+      "broken_grains_percent": 6,
+      "damaged_grains_percent": 1.5,
+      "chalky_grains_percent": 3.2,
+      "foreign_matter_percent": 0.18,
+      "color_uniformity_score": 82,
+      "size_uniformity_score": 78,
+      "shape_uniformity_score": 80,
+      "surface_defects_percent": 4,
+      "measured_moisture_percent": 9.8,
+      "bimodal_color_detected": false,
+      "mold_visible": false,
+    """
+
+    recovered = pipeline._recover_grading_fields_from_text(raw_text)
+
+    assert recovered["quality_grade"] == "B"
+    assert recovered["chalky_grains_percent"] == 3.2
+    assert recovered["surface_defects_percent"] == 4
+    assert recovered["broken_grains_percent"] == 6
+    assert recovered["foreign_matter_percent"] == 0.18
+    assert recovered["bimodal_color_detected"] is False
+    assert recovered["mold_visible"] is False
+
+
+def test_malformed_recovery_does_not_turn_mold_field_name_into_hazard():
+    pipeline = VisionRAGPipeline(rag_retrieval_mode="lexical")
+    raw_text = """
+    {
+      "quality_grade": "B",
+      "quality_score": 72,
+      "broken_grains_percent": 6,
+      "damaged_grains_percent": 1.5,
+      "chalky_grains_percent": 3.2,
+      "foreign_matter_percent": 0.18,
+      "organic_extraneous_matter_percent": 0.05,
+      "inorganic_extraneous_matter_percent": 0.13,
+      "color_uniformity_score": 78,
+      "size_uniformity_score": 76,
+      "shape_uniformity_score": 79,
+      "surface_defects_percent": 4,
+      "measured_moisture_percent": 8.8,
+      "bimodal_color_detected": false,
+      "mold_visible": false,
+      "visible_defect
+    """
+
+    heuristic = pipeline._extract_grading_hints_from_text(raw_text, _fake_physics_proxies())
+    recovered = pipeline._recover_grading_fields_from_text(raw_text)
+    merged = pipeline._merge_recovered_grading_fields(heuristic, recovered)
+
+    assert merged["mold_visible"] is False
+    assert "mold" not in merged["visible_defects"]
+    assert merged["foreign_matter_percent"] == 0.18
+    assert merged["broken_grains_percent"] == 6
+    assert merged["quality_grade"] == "B"
 
 
 def test_manifest_records_quality_flags_for_validation(tmp_path):

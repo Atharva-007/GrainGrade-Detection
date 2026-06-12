@@ -1,20 +1,22 @@
 # AI Grain Grade
 
-AI Grain Grade is a Streamlit application for finger millet (ragi) quality grading. It combines image-derived physics proxies, a rule engine, lexical RAG over grading documents, and a cloud OpenAI-compatible Qwen3-VL endpoint.
+AI Grain Grade is a FastAPI + React application for grain quality grading. It combines image-derived OpenCV physics proxies, crop rules, lexical RAG over grading documents, and a cloud OpenAI-compatible Qwen-VL endpoint.
 
 ## What This Project Does
 
-- Accepts a grain image through the Streamlit UI.
-- Extracts deterministic image signals with OpenCV.
+- Accepts a grain image and a moisture-meter display image through a React inspection console.
+- Extracts the exact meter moisture value with OCR before grading.
+- Requires grain type and variety selection from `docs/rag/crop_knowledge`.
+- Extracts deterministic image signals with OpenCV from the grain image.
 - Retrieves authoritative grading and moisture rules from local Markdown indexes.
-- Calls the configured cloud Qwen3-VL provider for vision inference.
-- Applies deterministic safety and grading rules before showing the final result.
+- Calls the configured cloud Qwen-VL provider for meter OCR and vision inference.
+- Applies deterministic safety and grading rules before returning the final result.
 - Stores human corrections as feedback examples for reuse and audit review.
 
 ## Quick Start
 
 1. Create and activate your Python environment.
-2. Install dependencies:
+2. Install backend dependencies:
 
 ```powershell
 pip install -r requirements.txt
@@ -27,53 +29,56 @@ Copy-Item .env.example .env
 ```
 
 4. Fill in `QWEN_VL_API_KEY` in `.env`.
-5. Run the app:
+5. Start the backend:
 
 ```powershell
-python -m streamlit run app.py --server.port 8501
+uvicorn backend.app.main:app --reload --port 8000
 ```
 
-The local app URL is usually `http://localhost:8501`.
+6. Start the frontend in a second terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend URL: `http://localhost:5173`
+Backend health: `http://localhost:8000/api/health`
+API docs: `http://localhost:8000/docs`
 
 ## Docker Deployment
 
-Build the image:
-
-```powershell
-docker build -t ai-grain-grade:local .
-```
-
-Run it with your local environment file:
-
-```powershell
-docker run --rm --env-file .env -p 8501:8501 ai-grain-grade:local
-```
-
-For compose-based validation:
+For compose-based local validation:
 
 ```powershell
 docker compose up --build
 ```
 
-The container serves Streamlit on `http://localhost:8501`. The Streamlit health endpoint is `http://localhost:8501/_stcore/health`.
+Compose starts:
+
+- backend API on `http://localhost:8000`
+- frontend dev server on `http://localhost:5173`
+- feedback/upload data persisted in the `feedback_data` volume
 
 Cloud Qwen inference is configured through runtime environment variables:
 
-- `QWEN_VL_PROVIDER` - required provider, usually `dashscope` for the default cloud path.
+- `QWEN_VL_PROVIDER` - usually `dashscope` for the default cloud path.
 - `QWEN_VL_API_KEY` - required API key for the configured provider.
 - `QWEN_VL_BASE_URL` - optional OpenAI-compatible base URL override.
 - `QWEN_VL_MODEL` - optional model override.
 - `QWEN_VL_TIMEOUT_SECONDS` - optional request timeout override.
-
-The Docker image includes the app code, `docs/rag/`, `data/rag/rag_index.json`, examples, and Streamlit config. It does not copy `.env`, local feedback/uploads, model-weight directories, embedding caches, or graph caches into the image. Feedback records and uploaded session images are written under `data/feedback/feedback_data`; in compose this path is backed by the `feedback_data` Docker volume.
+- `QWEN_VL_ENABLE_THINKING` - keep `false` for faster upload analysis and strict JSON output.
+- `QWEN_VL_FALLBACK_MODELS` - comma-separated fallback list for DashScope invalid-model errors.
 
 ## Main Entry Points
 
-- `app.py` - tiny Streamlit launcher.
-- `src/ai_grain_grade/streamlit_app.py` - Streamlit user interface and workflow orchestration.
-- `src/ai_grain_grade/vision_rag_pipeline.py` - cloud Qwen3-VL calls, safety gate, RAG-guided grading, fallback logic.
+- `backend/app/main.py` - FastAPI application and API routes.
+- `backend/app/services.py` - runtime config, upload handling, model pipeline orchestration, feedback submission.
+- `frontend/src/App.tsx` - React inspection workspace.
+- `src/ai_grain_grade/vision_rag_pipeline.py` - cloud Qwen-VL calls, safety gate, RAG-guided grading, fallback logic.
 - `src/ai_grain_grade/physics_proxies.py` - OpenCV feature extraction from grain images.
-- `src/ai_grain_grade/rule_engine.py` - deterministic ragi grading thresholds.
+- `src/ai_grain_grade/rule_engine.py` - deterministic crop grading thresholds.
 - `src/ai_grain_grade/rag_engine.py` - Markdown chunking and lexical retrieval.
 - `src/ai_grain_grade/feedback.py` - JSON feedback storage and similar-correction retrieval.
 
@@ -81,25 +86,37 @@ The Docker image includes the app code, `docs/rag/`, `data/rag/rag_index.json`, 
 
 ```text
 .
-|-- app.py                         # Streamlit app entrypoint
-|-- Dockerfile                     # Container image for Streamlit deployment
-|-- docker-compose.yml             # Local container validation
-|-- .dockerignore                  # Container build exclusions
-|-- src/ai_grain_grade/            # Core Python package
+|-- app.py                         # FastAPI app launcher
+|-- backend/                       # FastAPI API layer
+|-- frontend/                      # React + Vite + TypeScript app
+|-- Dockerfile                     # Backend container image
+|-- docker-compose.yml             # Local backend/frontend validation
+|-- src/ai_grain_grade/            # Core Python model package
 |-- tests/                         # Python tests
-|-- requirements.txt               # Python dependencies
-|-- README.md                      # Project onboarding
+|-- requirements.txt               # Backend Python dependencies
 |-- .env.example                   # Local environment template
 |-- data/rag/                      # Local RAG indexes
 |-- data/feedback/                 # Example and runtime feedback records
 |-- docs/rag/                      # Runtime RAG source documents
-|-- docs/                          # Product, model, architecture, and prompt docs
 |-- examples/                      # Example calibration images
 |-- graphify-out/                  # Code knowledge graph outputs
-|-- legacy/                        # Older standalone model-doc Streamlit app
 |-- scripts/                       # Local helper scripts
 |-- supabase/                      # Supabase migrations and edge functions
 ```
+
+## API
+
+- `GET /api/health` - service readiness, runtime status, feedback count.
+- `GET /api/runtime` - model/provider status without secrets.
+- `GET /api/crops` - crop and variety catalog derived from `docs/rag/crop_knowledge`.
+- `POST /api/analyze` - multipart upload with:
+  - `grain_image`: grain lot JPG/PNG.
+  - `moisture_image`: moisture machine display JPG/PNG.
+  - `crop_type`: one of the crop catalog values, such as `finger_millets`, `rice`, or `bajra`.
+  - `crop_variety`: selected variety label.
+  - `confidence_threshold`: optional 0-100 review floor.
+  - `manual_moisture_percent`: backend-only operator fallback when the meter display is unreadable; the React app uses OCR from `moisture_image`.
+- `POST /api/feedback` - stores operator correction for a previous analysis.
 
 ## Runtime Configuration
 
@@ -111,12 +128,10 @@ The active app reads these Qwen variables:
 - `QWEN_VL_BASE_URL` - optional OpenAI-compatible base URL override.
 - `QWEN_VL_MODEL` - optional model override.
 - `QWEN_VL_TIMEOUT_SECONDS` - optional cloud request timeout.
-- `CROP_MODEL_ROUTES` - optional JSON map for crop-specific routing
-  (for example `{"rice":{"provider":"dashscope","model":"qwen3-vl-plus"}}`).
-- `CROP_MODEL_ROUTES_PATH` - optional file path containing the same crop route map.
-
-When a crop has a dedicated entry, that route is used for inference first; otherwise
-the app uses the default Qwen configuration.
+- `QWEN_VL_ENABLE_THINKING` - defaults to `false` for Qwen3-VL calls.
+- `QWEN_VL_FALLBACK_MODELS` - defaults to `qwen3-vl-flash,qwen-vl-plus`.
+- `CROP_MODEL_ROUTES` - optional JSON map for crop-specific routing.
+- `CROP_MODEL_ROUTES_PATH` - optional path containing the same crop route map.
 
 Secrets belong in `.env`; `.env` and `*.env` are ignored by git.
 
@@ -128,41 +143,28 @@ The local RAG index reads:
 - `docs/rag/AUTHORIZED_RAGI_DATA_SOURCES.md`
 - `docs/rag/ARCHITECTURE.md`
 - `docs/rag/UNIFIED_RAGI_QUALITY_AND_MOISTURE_SPEC.md`
-- `docs/rag/crop_knowledge/**/*` (crop reference and grading rules, when present)
+- `docs/rag/crop_knowledge/**/*`
 
 The chunk index lives at `data/rag/rag_index.json`.
 
-## Dataset manifest and training artifacts
-
-Use `scripts/build_crop_dataset_manifest.py` to generate a deterministic crop dataset
-manifest and export optional per-crop `train` / `val` JSONL files for later Qwen tuning jobs:
-
-```powershell
-python scripts/build_crop_dataset_manifest.py --emit-training-dir data/dataset_manifests/training
-```
-
-Optional quality filtering supports deterministic exports:
-
-```powershell
-python scripts/build_crop_dataset_manifest.py --emit-training-dir data/dataset_manifests/training --require-quality-flags flat_archive_path --exclude-quality-flags missing_label
-```
-
 ## Tests
 
-Run the focused unit and integration tests with:
+Run the backend and model tests with:
 
 ```powershell
 python -m pytest
 ```
 
-Some tests use local lexical indexes and deterministic fallbacks. Cloud provider tests mock HTTP calls and do not require a real API key.
+Run the frontend build check with:
 
-## Generated Files
+```powershell
+cd frontend
+npm run build
+```
 
-The app and tools can generate logs, caches, uploaded samples, graph caches, and temporary Streamlit files. These are ignored by git. If the root gets noisy during development, it is safe to remove ignored `*.log`, `__pycache__/`, `.pytest_cache/`, and temporary Streamlit output files.
+Cloud provider tests mock HTTP calls and do not require a real API key.
 
 ## Project Notes
 
-- `docs/archive/grain-grade-md-files/` preserves imported planning material and duplicate document exports.
-- `legacy/model-doc-app/` is an older standalone Gemini/RAG app kept for reference.
+- Supabase migrations are present for future persistent storage, but the active app currently stores feedback as local JSON.
 - `graphify-out/GRAPH_REPORT.md` is useful for architecture navigation; the central nodes are `FeedbackCollector`, `PhysicsProxiesExtractor`, `RAGEngine`, and `VisionRAGPipeline`.

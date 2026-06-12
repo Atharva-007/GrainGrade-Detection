@@ -57,6 +57,11 @@ class RuleDecision:
     uniformity: float = 70.0
     mold_visible: bool = False
     rule_hits: List[str] = field(default_factory=list)
+    grain_grade: str = "B"
+    grain_score: int = 75
+    moisture_score: int = 100
+    final_score: int = 75
+    score_breakdown: Dict[str, Any] = field(default_factory=dict)
 
 
 def _as_float(value: Any, default: float) -> float:
@@ -105,6 +110,107 @@ def _grade_value(value: Any) -> str:
     return "B"
 
 
+def _clip_score(value: float, low: float = 0.0, high: float = 100.0) -> int:
+    return int(round(max(low, min(high, value))))
+
+
+def _score_to_grade(score: int) -> str:
+    if score >= 90:
+        return "A"
+    if score >= 75:
+        return "B"
+    return "C"
+
+
+def _score_max_metric(value: float, grade_a: float, grade_b: float, grade_c: float) -> int:
+    """Map a lower-is-better metric to a continuous 0-100 score."""
+    if value <= grade_a:
+        span = max(abs(grade_a), 0.01)
+        return _clip_score(90.0 + ((grade_a - value) / span) * 10.0)
+    if value <= grade_b:
+        span = max(grade_b - grade_a, 0.01)
+        return _clip_score(75.0 + ((grade_b - value) / span) * 14.0)
+    if value <= grade_c:
+        span = max(grade_c - grade_b, 0.01)
+        return _clip_score(60.0 + ((grade_c - value) / span) * 14.0)
+    span = max(grade_c - grade_b, grade_b - grade_a, abs(grade_c), 1.0)
+    return _clip_score(60.0 - ((value - grade_c) / span) * 35.0, low=20.0)
+
+
+def _score_min_metric(value: float, grade_a: float, grade_b: float, grade_c: float) -> int:
+    """Map a higher-is-better metric to a continuous 0-100 score."""
+    if value >= grade_a:
+        span = max(100.0 - grade_a, 1.0)
+        return _clip_score(90.0 + ((value - grade_a) / span) * 10.0)
+    if value >= grade_b:
+        span = max(grade_a - grade_b, 0.01)
+        return _clip_score(75.0 + ((value - grade_b) / span) * 14.0)
+    if value >= grade_c:
+        span = max(grade_b - grade_c, 0.01)
+        return _clip_score(60.0 + ((value - grade_c) / span) * 14.0)
+    span = max(grade_b - grade_c, grade_a - grade_b, grade_c, 1.0)
+    return _clip_score(60.0 - ((grade_c - value) / span) * 35.0, low=20.0)
+
+
+def _risk_score(moisture_risk: Any) -> int:
+    label = str(getattr(moisture_risk, "value", moisture_risk or "")).upper()
+    if label == "LOW":
+        return 100
+    if label == "MODERATE":
+        return 82
+    if label == "HIGH":
+        return 65
+    if label == "CRITICAL":
+        return 35
+    return 85
+
+
+def _weighted_average(scores: Dict[str, int], weights: Dict[str, float]) -> int:
+    usable = [(name, float(score), float(weights.get(name, 1.0))) for name, score in scores.items()]
+    usable = [item for item in usable if item[2] > 0]
+    if not usable:
+        return 75
+    total_weight = sum(item[2] for item in usable)
+    return _clip_score(sum(score * weight for _name, score, weight in usable) / total_weight)
+
+
+def _grade_from_score(score: int) -> str:
+    if score >= 88:
+        return "A"
+    if score >= 72:
+        return "B"
+    return "C"
+
+
+def _clamp_score_to_grade(score: int, grade: str) -> int:
+    if grade == "A":
+        return _clip_score(score, low=88, high=100)
+    if grade == "B":
+        return _clip_score(score, low=72, high=87)
+    return _clip_score(score, low=20, high=71)
+
+
+def _score_breakdown_payload(
+    *,
+    grain_grade: str,
+    grain_score: int,
+    moisture_score: int,
+    final_score: int,
+    metrics: Dict[str, Dict[str, Any]],
+    penalties: List[Dict[str, Any]],
+    rule_source: str,
+) -> Dict[str, Any]:
+    return {
+        "grain_grade": grain_grade,
+        "grain_score": grain_score,
+        "moisture_score": moisture_score,
+        "final_score": final_score,
+        "metrics": metrics,
+        "penalties": penalties,
+        "rule_source": rule_source,
+    }
+
+
 class RagiRuleEngine:
     """Applies hard ragi thresholds after VLM interpretation."""
 
@@ -144,6 +250,68 @@ class RagiRuleEngine:
         moisture_label = str(getattr(moisture_risk, "value", moisture_risk or "")).upper()
         calibrated_moisture = _as_float(moisture_percent, -1.0)
         damaged_like = max(broken_grain, shape_defect)
+        metric_scores = {
+            "off_tone_fraction": _score_max_metric(off_tone, t.off_tone_a_max, t.off_tone_c_min, 35.0),
+            "size_deviation": _score_max_metric(size_dev, t.size_dev_a_max, t.size_dev_c_min, 30.0),
+            "shape_defect_fraction": _score_max_metric(shape_defect, t.shape_defect_a_max, t.shape_defect_c_min, 25.0),
+            "broken_grain_percent": _score_max_metric(broken_grain, t.damaged_a_max, t.broken_c_min, t.damaged_c_max),
+            "foreign_matter_percent": _score_max_metric(foreign_matter, t.foreign_a_max, t.foreign_b_max, t.foreign_c_max),
+            "other_edible_grains_percent": _score_max_metric(other_grains, t.other_grain_a_max, t.other_grain_b_max, t.other_grain_c_max),
+        }
+        metric_details = {
+            name: {"value": round(value, 3), "score": metric_scores[name]}
+            for name, value in {
+                "off_tone_fraction": off_tone,
+                "size_deviation": size_dev,
+                "shape_defect_fraction": shape_defect,
+                "broken_grain_percent": broken_grain,
+                "foreign_matter_percent": foreign_matter,
+                "other_edible_grains_percent": other_grains,
+            }.items()
+        }
+        metric_weights = {
+            "off_tone_fraction": 18,
+            "size_deviation": 14,
+            "shape_defect_fraction": 14,
+            "broken_grain_percent": 12,
+            "foreign_matter_percent": 22,
+            "other_edible_grains_percent": 8,
+        }
+        grain_score_base = _weighted_average(metric_scores, metric_weights)
+        moisture_score_base = (
+            _score_max_metric(calibrated_moisture, t.moisture_a_max, t.moisture_b_max, t.moisture_c_max)
+            if calibrated_moisture >= 0
+            else _risk_score(moisture_risk)
+        )
+
+        def _decision_scores(
+            final_grade: str,
+            grain_grade: str,
+            penalty_reasons: List[str],
+        ) -> tuple[int, Dict[str, Any]]:
+            penalties = [
+                {"name": f"penalty_{index + 1}", "points": 12, "reason": reason}
+                for index, reason in enumerate(penalty_reasons)
+            ]
+            raw_final = min(grain_score_base, moisture_score_base) - sum(
+                int(item["points"]) for item in penalties
+            )
+            if final_grade == "A":
+                final_score = _clip_score(raw_final, low=90, high=100)
+            elif final_grade == "B":
+                final_score = _clip_score(raw_final, low=75, high=89)
+            else:
+                final_score = _clip_score(raw_final, low=20, high=74)
+            breakdown = _score_breakdown_payload(
+                grain_grade=grain_grade,
+                grain_score=grain_score_base,
+                moisture_score=moisture_score_base,
+                final_score=final_score,
+                metrics=metric_details,
+                penalties=penalties,
+                rule_source="ragi_fallback_rules",
+            )
+            return final_score, breakdown
 
         hazard_terms = (
             "mold",
@@ -186,9 +354,11 @@ class RagiRuleEngine:
             rule_hits.append("moisture_reject")
 
         if hard_reasons:
+            grain_grade = "C" if any("Moisture" not in reason and "moisture" not in reason for reason in hard_reasons) else _score_to_grade(grain_score_base)
+            final_score, breakdown = _decision_scores("C", grain_grade, hard_reasons)
             return RuleDecision(
                 grade="C",
-                score=25,
+                score=final_score,
                 reject=True,
                 reject_reasons=hard_reasons,
                 broken_grain=broken_grain,
@@ -196,6 +366,11 @@ class RagiRuleEngine:
                 uniformity=min(uniformity, 35.0),
                 mold_visible=mold_visible or visible_hazard,
                 rule_hits=rule_hits,
+                grain_grade=grain_grade,
+                grain_score=grain_score_base,
+                moisture_score=moisture_score_base,
+                final_score=final_score,
+                score_breakdown=breakdown,
             )
 
         proxy_quality_risk = (
@@ -253,17 +428,24 @@ class RagiRuleEngine:
             rule_hits.append("visual_c")
 
         if grade_c_reasons:
-            reject = bool(proxy_quality_risk or foreign_matter > t.foreign_b_max or moisture_forces_c)
+            visual_reasons = [reason for reason in grade_c_reasons if not reason.lower().startswith("moisture")]
+            grain_grade = "C" if visual_reasons else _score_to_grade(grain_score_base)
+            final_score, breakdown = _decision_scores("C", grain_grade, grade_c_reasons)
             return RuleDecision(
                 grade="C",
-                score=55 if not reject else 45,
-                reject=reject,
+                score=final_score,
+                reject=False,
                 reject_reasons=list(dict.fromkeys(grade_c_reasons)),
                 broken_grain=broken_grain,
                 foreign_matter=foreign_matter,
                 uniformity=min(uniformity, 55.0),
                 mold_visible=False,
                 rule_hits=list(dict.fromkeys(rule_hits)),
+                grain_grade=grain_grade,
+                grain_score=grain_score_base,
+                moisture_score=moisture_score_base,
+                final_score=final_score,
+                score_breakdown=breakdown,
             )
 
         grade_a_ok = (
@@ -279,9 +461,10 @@ class RagiRuleEngine:
             and proxy_grade_a_ok
         )
         if grade_a_ok:
+            final_score, breakdown = _decision_scores("A", "A", [])
             return RuleDecision(
                 grade="A",
-                score=90,
+                score=final_score,
                 reject=False,
                 reject_reasons=[],
                 broken_grain=broken_grain,
@@ -289,6 +472,11 @@ class RagiRuleEngine:
                 uniformity=max(uniformity, 90.0),
                 mold_visible=False,
                 rule_hits=["grade_a_all_gates_pass"],
+                grain_grade="A",
+                grain_score=grain_score_base,
+                moisture_score=moisture_score_base,
+                final_score=final_score,
+                score_breakdown=breakdown,
             )
 
         b_reasons: List[str] = []
@@ -305,9 +493,11 @@ class RagiRuleEngine:
             b_reasons.append("Lot is usable but not premium")
             rule_hits.append("visual_b")
 
+        grain_grade = "B" if b_reasons else _score_to_grade(grain_score_base)
+        final_score, breakdown = _decision_scores("B", grain_grade, b_reasons)
         return RuleDecision(
             grade="B",
-            score=75,
+            score=final_score,
             reject=False,
             reject_reasons=[],
             broken_grain=broken_grain,
@@ -315,6 +505,11 @@ class RagiRuleEngine:
             uniformity=float(max(55.0, min(uniformity, 85.0))),
             mold_visible=False,
             rule_hits=list(dict.fromkeys(rule_hits or b_reasons)),
+            grain_grade=grain_grade,
+            grain_score=grain_score_base,
+            moisture_score=moisture_score_base,
+            final_score=final_score,
+            score_breakdown=breakdown,
         )
 
 
@@ -383,6 +578,7 @@ class CropRuleSet:
 
     crop: str
     metrics: Dict[str, CropMetricRule]
+    weights: Dict[str, float] = field(default_factory=dict)
     grade_a_score: int = 90
     grade_b_score: int = 75
     grade_c_score: int = 60
@@ -447,6 +643,25 @@ def _extract_score_blocks(text: str) -> Dict[str, int]:
     return scores
 
 
+def _extract_weight_blocks(text: str) -> Dict[str, float]:
+    weights: Dict[str, float] = {}
+    in_weights = False
+    for raw_line in text.splitlines():
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if indent == 0:
+            in_weights = line == "scoring_weights:"
+            continue
+        if not in_weights:
+            continue
+        match = re.match(r"([a-zA-Z_][a-zA-Z0-9_]*):\s*(-?\d+(?:\.\d+)?)\s*$", line)
+        if match:
+            weights[match.group(1)] = float(match.group(2))
+    return weights
+
+
 def _build_rule_set_from_yaml(path: Path, crop_name: str) -> Optional[CropRuleSet]:
     if not path.exists():
         return None
@@ -472,10 +687,13 @@ def _build_rule_set_from_yaml(path: Path, crop_name: str) -> Optional[CropRuleSe
     if not metrics:
         return None
 
-    scores = _extract_score_blocks(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    scores = _extract_score_blocks(text)
+    weights = _extract_weight_blocks(text)
     return CropRuleSet(
         crop=crop_name,
         metrics=metrics,
+        weights=weights,
         grade_a_score=scores.get("grade_a_score", 90),
         grade_b_score=scores.get("grade_b_score", 75),
         grade_c_score=scores.get("grade_c_score", 60),
@@ -520,6 +738,16 @@ class CropRuleEngine:
             return []
         return rule_set.describe()
 
+    def moisture_thresholds(self, crop_type: Any) -> tuple[float, float, float]:
+        """Return A/B/C maximum moisture thresholds for the selected crop."""
+        rule_set = self._rule_set_for_crop(crop_type)
+        if rule_set:
+            rule = rule_set.metrics.get("moisture")
+            if rule and rule.direction == "max":
+                return rule.grade_a, rule.grade_b, rule.grade_c
+        fallback = self._fallback.thresholds
+        return fallback.moisture_a_max, fallback.moisture_b_max, fallback.moisture_c_max
+
     def _response_float(
         self,
         response_json: Dict[str, Any],
@@ -556,7 +784,7 @@ class CropRuleEngine:
         if metric == "chalky_grains":
             return self._response_float(
                 response_json,
-                ("chalky_grains_percent", "chalky_grain_percent", "off_tone_fraction"),
+                ("chalky_grains_percent", "chalky_grain_percent"),
                 0.0,
             ) or 0.0
         if metric == "foreign_matter":
@@ -620,10 +848,38 @@ class CropRuleEngine:
         if metric == "surface_defects":
             return self._response_float(
                 response_json,
-                ("surface_defects_percent", "surface_defects", "shape_defect_fraction"),
+                ("surface_defects_percent", "surface_defects"),
                 0.0,
             ) or 0.0
         return self._response_float(response_json, (f"{metric}_percent", metric), 0.0) or 0.0
+
+    def _metric_score(self, rule: CropMetricRule, value: float) -> int:
+        if rule.direction == "min":
+            return _score_min_metric(value, rule.grade_a, rule.grade_b, rule.grade_c)
+        return _score_max_metric(value, rule.grade_a, rule.grade_b, rule.grade_c)
+
+    def _weights_for_metrics(self, rule_set: CropRuleSet) -> Dict[str, float]:
+        weights: Dict[str, float] = {}
+        purity_metrics = {
+            "foreign_matter",
+            "organic_extraneous_matter",
+            "inorganic_extraneous_matter",
+            "other_edible_grains",
+        }
+        present_purity = purity_metrics.intersection(rule_set.metrics)
+        split_purity = (
+            float(rule_set.weights.get("purity", 0.0)) / len(present_purity)
+            if present_purity
+            else 0.0
+        )
+        for metric in rule_set.metrics:
+            if metric in rule_set.weights:
+                weights[metric] = float(rule_set.weights[metric])
+            elif metric in purity_metrics and split_purity > 0:
+                weights[metric] = split_purity
+            else:
+                weights[metric] = 1.0
+        return weights
 
     def _evaluate_crop_rules(
         self,
@@ -634,6 +890,7 @@ class CropRuleEngine:
         moisture_percent: Optional[float] = None,
     ) -> RuleDecision:
         llm_grade = _grade_value(response_json.get("quality_grade", "B"))
+        llm_score = _as_float(response_json.get("quality_score"), 0.0)
         mold_visible = _as_bool(response_json.get("mold_visible", False))
         visible_defects = [item.lower() for item in _as_list(response_json.get("visible_defects"))]
         hazard_terms = (
@@ -656,10 +913,19 @@ class CropRuleEngine:
 
         values: Dict[str, float] = {}
         metric_grades: Dict[str, str] = {}
+        metric_scores: Dict[str, int] = {}
+        metric_details: Dict[str, Dict[str, Any]] = {}
         hard_reasons: List[str] = []
         grade_c_reasons: List[str] = []
         b_reasons: List[str] = []
         rule_hits: List[str] = []
+        hard_reject_metrics = {
+            "moisture",
+            "foreign_matter",
+            "organic_extraneous_matter",
+            "inorganic_extraneous_matter",
+            "weevilled_grains",
+        }
 
         if visible_hazard:
             hard_reasons.append("Hard reject gate: visible mould, insect, stone, or deleterious material")
@@ -670,23 +936,42 @@ class CropRuleEngine:
             value = self._metric_value(metric, response_json, physics_proxies, moisture_percent)
             values[metric] = value
             metric_grade = rule.grade_for_value(value)
-            metric_grades[metric] = metric_grade
+            metric_score = self._metric_score(rule, value)
 
-            if metric == "moisture" and not moisture_percent:
+            if metric == "moisture" and moisture_percent is None:
                 if moisture_label == "CRITICAL":
                     metric_grade = "REJECT"
                 elif moisture_label == "HIGH":
                     metric_grade = "C"
                 elif moisture_label == "MODERATE":
                     metric_grade = "B"
-                metric_grades[metric] = metric_grade
+                metric_score = _risk_score(moisture_risk)
 
-            if metric_grade == "REJECT":
+            metric_grades[metric] = metric_grade
+            metric_scores[metric] = metric_score
+            metric_details[metric] = {
+                "value": round(value, 3),
+                "grade": metric_grade,
+                "score": metric_score,
+                "thresholds": {
+                    "direction": rule.direction,
+                    "grade_a": rule.grade_a,
+                    "grade_b": rule.grade_b,
+                    "grade_c": rule.grade_c,
+                },
+            }
+
+            if metric_grade == "REJECT" and metric in hard_reject_metrics:
                 comparator = "below" if rule.direction == "min" else "exceeds"
                 hard_reasons.append(
                     f"{metric.replace('_', ' ').title()} {value:.2f}% {comparator} Grade C threshold {rule.grade_c:.2f}"
                 )
                 rule_hits.extend([f"{metric}_reject", f"{rule_set.crop}_{metric}_reject"])
+            elif metric_grade == "REJECT":
+                grade_c_reasons.append(
+                    f"{metric.replace('_', ' ').title()} is outside Grade C range; grain health penalty"
+                )
+                rule_hits.extend([f"{metric}_health_penalty", f"{rule_set.crop}_{metric}_health_penalty"])
             elif metric_grade == "C":
                 grade_c_reasons.append(f"{metric.replace('_', ' ').title()} is in Grade C range")
                 rule_hits.extend([f"{metric}_c", f"{rule_set.crop}_{metric}_c"])
@@ -697,6 +982,13 @@ class CropRuleEngine:
         if moisture_label == "CRITICAL" and "moisture" not in rule_set.metrics:
             hard_reasons.append("Critical proxy moisture risk")
             rule_hits.append("moisture_reject")
+            metric_scores["moisture"] = _risk_score(moisture_risk)
+            metric_details["moisture"] = {
+                "value": moisture_percent,
+                "grade": "REJECT",
+                "score": metric_scores["moisture"],
+                "thresholds": {"source": "moisture_risk"},
+            }
 
         broken = values.get("broken_grains", _as_float(response_json.get("broken_grain_percent"), 0.0))
         foreign = values.get(
@@ -714,11 +1006,61 @@ class CropRuleEngine:
             if uniformity_values
             else _as_float(physics_proxies.get("uniformity_score"), 70.0)
         )
+        weights = self._weights_for_metrics(rule_set)
+        grain_metric_scores = {
+            metric: score
+            for metric, score in metric_scores.items()
+            if metric != "moisture"
+        }
+        grain_metric_weights = {
+            metric: weight
+            for metric, weight in weights.items()
+            if metric != "moisture"
+        }
+        grain_score_base = _weighted_average(grain_metric_scores, grain_metric_weights)
+        moisture_score_base = metric_scores.get("moisture", _risk_score(moisture_risk))
+
+        def _decision_scores(
+            final_grade: str,
+            grain_grade: str,
+            penalty_reasons: List[str],
+        ) -> tuple[int, Dict[str, Any]]:
+            penalties = []
+            for index, reason in enumerate(penalty_reasons):
+                lowered = reason.lower()
+                if "blocks grade a" in lowered:
+                    points = 3
+                elif "grade c range" in lowered:
+                    points = 5
+                elif "grain health penalty" in lowered:
+                    points = 7
+                else:
+                    points = 10
+                penalties.append({"name": f"penalty_{index + 1}", "points": points, "reason": reason})
+            raw_final = min(grain_score_base, moisture_score_base) - sum(
+                int(item["points"]) for item in penalties
+            )
+            final_score = _clamp_score_to_grade(raw_final, final_grade)
+            breakdown = _score_breakdown_payload(
+                grain_grade=grain_grade,
+                grain_score=grain_score_base,
+                moisture_score=moisture_score_base,
+                final_score=final_score,
+                metrics=metric_details,
+                penalties=penalties,
+                rule_source=f"{rule_set.crop}_yaml_rules",
+            )
+            return final_score, breakdown
 
         if hard_reasons:
+            visual_hard = [
+                reason for reason in hard_reasons if not reason.lower().startswith("moisture")
+            ]
+            grain_grade = "C" if visual_hard else _score_to_grade(grain_score_base)
+            final_score, breakdown = _decision_scores("C", grain_grade, hard_reasons)
             return RuleDecision(
                 grade="C",
-                score=25,
+                score=final_score,
                 reject=True,
                 reject_reasons=list(dict.fromkeys(hard_reasons)),
                 broken_grain=broken,
@@ -726,19 +1068,11 @@ class CropRuleEngine:
                 uniformity=min(uniformity, 35.0),
                 mold_visible=mold_visible or visible_hazard,
                 rule_hits=list(dict.fromkeys(rule_hits)),
-            )
-
-        if grade_c_reasons:
-            return RuleDecision(
-                grade="C",
-                score=rule_set.grade_c_score,
-                reject=bool("moisture_c" in rule_hits),
-                reject_reasons=list(dict.fromkeys(grade_c_reasons)),
-                broken_grain=broken,
-                foreign_matter=foreign,
-                uniformity=min(uniformity, 60.0),
-                mold_visible=False,
-                rule_hits=list(dict.fromkeys(rule_hits)),
+                grain_grade=grain_grade,
+                grain_score=grain_score_base,
+                moisture_score=moisture_score_base,
+                final_score=final_score,
+                score_breakdown=breakdown,
             )
 
         clumping = _as_float(physics_proxies.get("clumping", {}).get("density"), 0.0)
@@ -746,32 +1080,154 @@ class CropRuleEngine:
         roughness = _as_float(physics_proxies.get("roughness_score"), 50.0)
         grain_coverage = _as_float(physics_proxies.get("grain_mask_coverage"), 0.5)
         proxy_grade_a_ok = (
-            clumping < 0.12
-            and darkness < 45
-            and uniformity >= 72
-            and roughness >= 20
-            and grain_coverage >= 0.15
+            clumping < 0.18
+            and darkness < 58
+            and uniformity >= 68
+            and roughness >= 18
+            and grain_coverage >= 0.10
         )
-        if llm_grade == "A" and proxy_grade_a_ok and not b_reasons:
+        moisture_c_reasons = [
+            reason for reason in grade_c_reasons if reason.lower().startswith("moisture")
+        ]
+        grain_health_c_reasons = [
+            reason for reason in grade_c_reasons if not reason.lower().startswith("moisture")
+        ]
+        rice_tolerated_visual_c_reasons = [
+            reason
+            for reason in grain_health_c_reasons
+            if (
+                rule_set.crop == "rice"
+                and "outside grade c" not in reason.lower()
+                and any(
+                    term in reason.lower()
+                    for term in (
+                        "color uniformity",
+                        "size uniformity",
+                        "shape uniformity",
+                    )
+                )
+            )
+        ]
+        rice_blocking_c_reasons = [
+            reason
+            for reason in grade_c_reasons
+            if reason not in rice_tolerated_visual_c_reasons
+        ]
+
+        if moisture_c_reasons:
+            grain_grade = _grade_from_score(grain_score_base)
+            final_score, breakdown = _decision_scores("C", grain_grade, grade_c_reasons)
+            return RuleDecision(
+                grade="C",
+                score=final_score,
+                reject=False,
+                reject_reasons=list(dict.fromkeys(grade_c_reasons)),
+                broken_grain=broken,
+                foreign_matter=foreign,
+                uniformity=min(uniformity, 60.0),
+                mold_visible=False,
+                rule_hits=list(dict.fromkeys(rule_hits)),
+                grain_grade=grain_grade,
+                grain_score=grain_score_base,
+                moisture_score=moisture_score_base,
+                final_score=final_score,
+                score_breakdown=breakdown,
+            )
+
+        grade_a_blocking_terms = (
+            "moisture",
+            "foreign matter",
+            "organic extraneous",
+            "inorganic extraneous",
+            "other edible",
+            "weevilled",
+        )
+        grade_a_blocking_reasons = [
+            reason
+            for reason in b_reasons
+            if any(term in reason.lower() for term in grade_a_blocking_terms)
+        ]
+        tolerated_grade_a_reasons = [
+            reason for reason in b_reasons if reason not in grade_a_blocking_reasons
+        ]
+        grade_a_score_gate_ok = (
+            llm_grade != "C"
+            and proxy_grade_a_ok
+            and not grade_c_reasons
+            and moisture_score_base >= 90
+            and grain_score_base >= 88
+            and not grade_a_blocking_reasons
+            and len(tolerated_grade_a_reasons) <= 2
+        )
+        rice_low_moisture_a_gate_ok = (
+            rule_set.crop == "rice"
+            and llm_grade in {"A", "B"}
+            and not rice_blocking_c_reasons
+            and moisture_score_base >= 90
+            and grain_score_base >= 78
+            and llm_score >= 70
+            and len(rice_tolerated_visual_c_reasons) <= 2
+        )
+
+        if grade_a_score_gate_ok or rice_low_moisture_a_gate_ok:
+            grade_a_penalties = list(
+                dict.fromkeys(tolerated_grade_a_reasons + rice_tolerated_visual_c_reasons)
+            )
+            final_score, breakdown = _decision_scores("A", "A", grade_a_penalties)
             return RuleDecision(
                 grade="A",
-                score=rule_set.grade_a_score,
+                score=final_score,
                 reject=False,
                 reject_reasons=[],
                 broken_grain=broken,
                 foreign_matter=foreign,
-                uniformity=max(uniformity, 90.0),
+                uniformity=max(uniformity, 88.0),
                 mold_visible=False,
-                rule_hits=[f"{rule_set.crop}_grade_a_all_gates_pass"],
+                rule_hits=list(dict.fromkeys(rule_hits + [f"{rule_set.crop}_grade_a_score_gate_pass"])),
+                grain_grade="A",
+                grain_score=grain_score_base,
+                moisture_score=moisture_score_base,
+                final_score=final_score,
+                score_breakdown=breakdown,
             )
 
+        severe_grain_c = (
+            grain_score_base < 68
+            and (
+                len(grain_health_c_reasons) >= 3
+                or llm_grade == "C"
+            )
+        )
+        if severe_grain_c:
+            final_score, breakdown = _decision_scores("C", "C", grade_c_reasons)
+            return RuleDecision(
+                grade="C",
+                score=final_score,
+                reject=False,
+                reject_reasons=list(dict.fromkeys(grade_c_reasons)),
+                broken_grain=broken,
+                foreign_matter=foreign,
+                uniformity=min(uniformity, 60.0),
+                mold_visible=False,
+                rule_hits=list(dict.fromkeys(rule_hits)),
+                grain_grade="C",
+                grain_score=grain_score_base,
+                moisture_score=moisture_score_base,
+                final_score=final_score,
+                score_breakdown=breakdown,
+            )
+
+        if grain_health_c_reasons:
+            b_reasons.extend(grain_health_c_reasons)
         if llm_grade != "A":
             b_reasons.append("Lot is usable but not premium")
             rule_hits.append("visual_b")
 
+        grain_grade = "B" if b_reasons else _grade_from_score(grain_score_base)
+        final_score, breakdown = _decision_scores("B", grain_grade, b_reasons)
         return RuleDecision(
             grade="B",
-            score=rule_set.grade_b_score,
+            score=final_score,
             reject=False,
             reject_reasons=[],
             broken_grain=broken,
@@ -779,6 +1235,11 @@ class CropRuleEngine:
             uniformity=float(max(55.0, min(uniformity, 85.0))),
             mold_visible=False,
             rule_hits=list(dict.fromkeys(rule_hits or b_reasons)),
+            grain_grade=grain_grade,
+            grain_score=grain_score_base,
+            moisture_score=moisture_score_base,
+            final_score=final_score,
+            score_breakdown=breakdown,
         )
 
     def evaluate(

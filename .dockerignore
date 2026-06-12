@@ -17,22 +17,15 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Logs and local Streamlit output
+# Logs and local app output
 *.log
 *.pid
-.streamlit-run*.log
-.streamlit-run*.out.log
-.streamlit-run*.err.log
-streamlit-*.log
-streamlit-*.out.log
-streamlit-*.err.log
-streamlit-app.log
-streamlit-app.err.log
 
 # Local caches and temporary directories
 .hf-cache/
 .cache/
-.tmp_streamlit_test/
+frontend/node_modules/
+node_modules/
 tmp*/
 tmp2a5sfseq/
 tmp81f78zpr/

@@ -126,7 +126,7 @@ def flatten_perspective(image_path_or_array: ImageInput) -> np.ndarray:
     The output canvas is mathematically constrained to the A4 portrait ratio:
     width:height = 1:sqrt(2), approximately 1:1.414. If any required marker is
     missing, the function logs a warning and returns the original image array so
-    the Streamlit app can continue with non-rectified analysis.
+    the app can continue with non-rectified analysis.
 
     Args:
         image_path_or_array: Path readable by cv2.imread, or an already-loaded

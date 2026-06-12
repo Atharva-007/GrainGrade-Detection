@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from numbers import Real
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .rule_engine import normalize_crop_name
 
@@ -19,7 +19,7 @@ DEFAULT_FEEDBACK_DIR = Path(__file__).resolve().parents[2] / "data" / "feedback"
 
 @dataclass
 class GradingFeedbackItem:
-    """Single operator correction captured by the Streamlit workflow."""
+    """Single operator correction captured by the web workflow."""
 
     sample_id: str
     image_path: str
@@ -35,8 +35,13 @@ class GradingFeedbackItem:
     batch_id: str = ""
     notes: str = ""
     selected_crop: str = ""
+    selected_variety: str = ""
     selected_crop_confidence: float = 0.0
     selection_source: str = ""
+    true_grain_grade: str = ""
+    session_log_path: str = ""
+    score_breakdown: Dict[str, Any] = field(default_factory=dict)
+    meter_moisture_percent: Optional[float] = None
     applied_rules: List[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -53,11 +58,12 @@ def flatten_feature_dict(data: Dict[str, Any], prefix: str = "") -> Dict[str, fl
 
 
 class FeedbackCollector:
-    """JSON-backed correction storage used by Streamlit and the Qwen prompt."""
+    """JSON-backed correction storage used by the API and the Qwen prompt."""
 
     def __init__(self, storage_path: str | Path = DEFAULT_FEEDBACK_DIR):
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
+        self.last_saved_path: Path | None = None
         self._feedback_cache: List[GradingFeedbackItem] | None = None
         self._feedback_signature: Tuple[int, int] | None = None
 
@@ -76,12 +82,50 @@ class FeedbackCollector:
                 json.dumps(asdict(feedback_item), ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            self.last_saved_path = filename
             self._feedback_cache = None
             self._feedback_signature = None
             logger.info("Feedback stored: %s", filename)
             return True
         except Exception as exc:
+            self.last_saved_path = None
             logger.error("Failed to store feedback: %s", exc)
+            return False
+
+    def append_training_export(
+        self,
+        feedback_item: GradingFeedbackItem,
+        export_path: str | Path,
+    ) -> bool:
+        """Append a fine-tune-ready correction record as JSONL."""
+        try:
+            target = Path(export_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            row = {
+                "sample_id": feedback_item.sample_id,
+                "image_path": feedback_item.image_path,
+                "crop": feedback_item.selected_crop,
+                "variety": feedback_item.selected_variety,
+                "predicted_grade": feedback_item.predicted_grade,
+                "true_grade": feedback_item.true_grade,
+                "true_grain_grade": feedback_item.true_grain_grade,
+                "predicted_moisture_risk": feedback_item.predicted_moisture_risk,
+                "true_moisture_risk": feedback_item.true_moisture_risk,
+                "meter_moisture_percent": feedback_item.meter_moisture_percent,
+                "confidence": feedback_item.confidence,
+                "image_features": feedback_item.image_features,
+                "score_breakdown": feedback_item.score_breakdown,
+                "applied_rules": feedback_item.applied_rules,
+                "notes": feedback_item.notes,
+                "session_log_path": feedback_item.session_log_path,
+                "timestamp": feedback_item.timestamp,
+                "device_model": feedback_item.device_model,
+            }
+            with target.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+            return True
+        except Exception as exc:
+            logger.error("Failed to append training export: %s", exc)
             return False
 
     def get_pending_count(self) -> int:
